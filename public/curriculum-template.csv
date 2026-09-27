@@ -1,0 +1,7 @@
+﻿code,name,units,year,semester,prerequisites,corequisites,offered
+CS101,Introduction to Programming,3,1,1,,,1;2
+CS102,Object-Oriented Programming,3,1,2,CS101,,1;2
+CS201,Data Structures,3,2,1,CS102,,1
+CS202,Database Systems,3,2,1,CS102,,1
+CS203,Software Project,3,2,2,CS201;CS202,,2
+
