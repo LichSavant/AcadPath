@@ -14,9 +14,10 @@ export default async function Home() {
     <main className="login">
       <section className="login-card">
         <div className="brand">
-          <GraduationCap size={30} /> AcadPath<span>STUDENT WORKSPACE</span>
+          <GraduationCap size={30} /> AcadPath
+          <span>University of San Carlos</span>
         </div>
-        <p className="eyebrow">YOUR DEGREE, WITH DIRECTION</p>
+        <p className="eyebrow">ACADEMIC PATHWAY PLANNER · USC CEBU</p>
         <h1>
           Make your next
           <br />

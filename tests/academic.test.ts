@@ -8,6 +8,11 @@ import {
   planWarnings,
   descendants,
   prerequisiteChain,
+  evaluatePlan,
+  projectPath,
+  candidateEligibility,
+  movePlannedSubject,
+  matchesSubject,
   type RecordData,
 } from '../lib/academic.ts';
 import {
@@ -118,7 +123,9 @@ void test('Plan catches same-term, duplicate and overloaded subjects', () => {
     { term: 1, codes: ['A'] },
   ];
   const warnings = planWarnings(r);
-  assert.ok(warnings.some((w) => w.includes('complete A')));
+  assert.ok(
+    warnings.some((w) => w.includes('Prerequisite not satisfied. Requires: A')),
+  );
   assert.ok(warnings.some((w) => w.includes('exceeds')));
   assert.ok(warnings.some((w) => w.includes('more than once')));
 });
@@ -270,4 +277,120 @@ void test('Labeled sample curriculum schedules without conflicts', () => {
   assert.equal(sampleCurriculum.subjects.length, 30);
   assert.deepEqual(f.unresolved, []);
   assert.deepEqual(planWarnings(r, f.plan), []);
+});
+
+void test('Invalid concurrent subjects cannot unlock a corequisite or later chain', () => {
+  const r = record();
+  r.curriculum.subjects[0].corequisites = ['C'];
+  r.curriculum.subjects[2].offered = [2];
+  r.plan = [
+    { term: 0, codes: ['A', 'C'] },
+    { term: 1, codes: ['B'] },
+  ];
+  const result = evaluatePlan(r);
+  assert.ok(result.terms.every((t) => t.entries.every((e) => !e.eligible)));
+  assert.equal(result.terms[1].completedUnits, 0);
+  assert.equal(result.graduation, null);
+});
+
+void test('Unit overload never contributes projected completions', () => {
+  const r = record();
+  r.settings.maxUnits = 5;
+  r.plan = [
+    { term: 0, codes: ['A', 'C'] },
+    { term: 1, codes: ['B'] },
+  ];
+  assert.equal(evaluatePlan(r).terms[1].progress, 0);
+  assert.ok(
+    planWarnings(r).some((w) => w.includes('Prerequisite not satisfied')),
+  );
+});
+
+void test('Candidates use earlier planned passes; moving a prerequisite exposes conflicts', () => {
+  const r = record();
+  r.plan = [{ term: 0, codes: ['A', 'C'] }];
+  assert.equal(candidateEligibility(r, 'B', 0).eligible, false);
+  assert.equal(candidateEligibility(r, 'B', 1).eligible, true);
+  r.plan = movePlannedSubject(r.plan, 'B', 1);
+  assert.equal(evaluatePlan(r).terms[1].completedUnits, 10);
+  r.plan = movePlannedSubject(r.plan, 'A', 2);
+  assert.ok(planWarnings(r).some((w) => w.startsWith('B: Prerequisite')));
+  assert.equal(
+    r.plan.flatMap((t) => t.codes).filter((c) => c === 'A').length,
+    1,
+  );
+});
+
+void test('Dashboard projection retains saved future placements', () => {
+  const r = record();
+  r.plan = [{ term: 4, codes: ['D'] }];
+  assert.equal(projectPath(r).graduation, null); // saved D has no earlier planned prerequisites
+  r.plan = [
+    { term: 0, codes: ['A', 'C'] },
+    { term: 1, codes: ['B'] },
+    { term: 4, codes: ['D'] },
+  ];
+  assert.equal(projectPath(r).graduation, 4);
+});
+
+void test('Simulation add/remove and failed future attempts reschedule without modifying data', () => {
+  const r = record();
+  const original = structuredClone(r);
+  const added = simulate(r, { code: 'A', action: 'add', term: 2 });
+  assert.equal(added.forecast.plan.find((t) => t.codes.includes('A'))?.term, 2);
+  const removed = simulate(r, { code: 'A', action: 'remove', term: 0 });
+  assert.equal(
+    removed.forecast.plan.find((t) => t.codes.includes('A'))?.term,
+    1,
+  );
+  const failed = simulate(r, { code: 'A', action: 'fail', term: 0 });
+  assert.equal(
+    failed.forecast.plan.find((t) => t.codes.includes('A'))?.term,
+    1,
+  );
+  assert.equal(failed.forecast.graduation, 3);
+  assert.deepEqual(r, original);
+  for (const scenario of [added, removed, failed])
+    assert.deepEqual(planWarnings(scenario.data), []);
+});
+
+void test('Current subjects only unlock today when actually passed, and filters stay consistent', () => {
+  const r = record();
+  r.statuses.A = 'current';
+  const b = r.curriculum.subjects[1];
+  assert.equal(matchesSubject(b, r.statuses, 'Programming', 'blocked'), true);
+  assert.equal(matchesSubject(b, r.statuses, ' b ', 'eligible'), false);
+  const passed = simulate(r, { code: 'A', action: 'pass', term: 0 });
+  assert.equal(matchesSubject(b, passed.data.statuses, '', 'eligible'), true);
+  assert.equal(summary(r).completedUnits, 0);
+});
+
+void test('Profile and curriculum context round-trip; invalid numbers and scenarios are rejected', () => {
+  const r = record();
+  r.profile = { name: 'Student' };
+  r.curriculum.program = 'BS Computer Science';
+  r.curriculum.curriculumYear = 2024;
+  assert.deepEqual(validateRecord(r), r);
+  for (const invalid of [[], {}, ' ', null, true]) {
+    assert.throws(() =>
+      validateRecord({ ...r, settings: { ...r.settings, maxUnits: invalid } }),
+    );
+  }
+  assert.throws(() => simulate(r, { code: 'A', action: 'pass', term: 0 }));
+  assert.throws(() => simulate(r, { code: 'A', action: 'move', term: 24 }));
+  r.statuses.A = 'completed';
+  assert.throws(() => simulate(r, { code: 'A', action: 'fail', term: 0 }));
+});
+
+void test('Zero-unit curricula use subject completion without NaN progress', () => {
+  const r = record();
+  r.curriculum.subjects.forEach((s) => {
+    s.units = 0;
+  });
+  r.statuses.A = 'completed';
+  assert.equal(summary(r).progress, 25);
+  assert.equal(
+    summary({ ...r, curriculum: { ...r.curriculum, subjects: [] } }).progress,
+    0,
+  );
 });

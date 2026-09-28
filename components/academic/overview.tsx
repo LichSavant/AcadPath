@@ -1,27 +1,38 @@
 ﻿'use client';
 import { useMemo, useState } from 'react';
-import {
-  ArrowUpRight,
-  CheckCircle2,
-  BookOpen,
-  LockKeyhole,
-  Flag,
-} from 'lucide-react';
+import { ArrowUpRight, CheckCircle2, BookOpen, Flag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
 import {
+  Table,
+  TableHeader,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
+} from '@/components/ui/table';
+import {
   summary,
-  forecast,
+  projectPath,
+  graduationLabel,
   termLabel,
   descendants,
-  academicState,
   statusOf,
-  planWarnings,
+  prerequisiteEdges,
+  subjectLabel,
+  matchesSubject,
   type RecordData,
   type Subject,
 } from '@/lib/academic';
-import { SubjectCard, Pill, Blank, Choice, Notice } from './shared';
+import {
+  SubjectCard,
+  Pill,
+  Blank,
+  Choice,
+  Notice,
+  filterOptions,
+} from './shared';
 export function Dashboard({
   data,
   stats,
@@ -33,93 +44,153 @@ export function Dashboard({
   select: (s: Subject) => void;
   navigate: (page: 'review' | 'planner' | 'map') => void;
 }) {
-  const projection = useMemo(() => forecast(data), [data]);
+  const path = useMemo(() => projectPath(data), [data]);
+  const currentUnits = stats.current.reduce((n, s) => n + s.units, 0);
+  const unfinishedUnits = Math.max(0, stats.remainingUnits - currentUnits);
   const blockers = data.curriculum.subjects
     .filter((s) => statusOf(data.statuses, s.code) !== 'completed')
     .map((s) => ({
       s,
-      count: descendants(data.curriculum.subjects, s.code).filter(
+      downstream: descendants(data.curriculum.subjects, s.code).filter(
         (c) => statusOf(data.statuses, c) !== 'completed',
-      ).length,
+      ),
     }))
-    .filter((s) => s.count > 0)
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 4);
-  const conflicts = planWarnings(data);
+    .filter((b) => b.downstream.length)
+    .sort((a, b) => b.downstream.length - a.downstream.length)
+    .slice(0, 3);
+  const next = [...data.plan]
+    .filter((t) => t.codes.length)
+    .sort((a, b) => a.term - b.term)[0];
   return (
     <div className="stack">
       <section className="stats-grid">
         {[
           {
-            label: 'Degree progress',
+            label: 'Academic progress',
             value: stats.progress + '%',
-            sub:
-              stats.completedUnits +
-              ' of ' +
-              stats.totalUnits +
-              ' units completed',
-            Icon: CheckCircle2,
+            detail: stats.completed.length + ' subjects completed',
           },
           {
-            label: 'Currently taking',
+            label: 'Units completed',
+            value: stats.completedUnits + ' / ' + stats.totalUnits,
+            detail: 'Curriculum units',
+          },
+          {
+            label: 'Remaining units',
+            value: stats.remainingUnits,
+            detail: stats.remaining + ' unfinished subjects',
+          },
+          {
+            label: 'Current subjects',
             value: stats.current.length,
-            sub:
-              stats.current.reduce((n, s) => n + s.units, 0) +
-              ' units in progress',
-            Icon: BookOpen,
+            detail: currentUnits + ' units in progress',
           },
           {
-            label: 'Eligible right now',
+            label: 'Eligible subjects',
             value: stats.eligible.length,
-            sub: 'All prerequisites satisfied',
-            Icon: Flag,
+            detail: 'Requirements satisfied today',
           },
           {
-            label: 'Blocked subjects',
-            value: stats.blocked.length,
-            sub: 'Requirements still to complete',
-            Icon: LockKeyhole,
+            label: 'Expected graduation',
+            value: graduationLabel(data, path.graduation),
+            detail: data.plan.length
+              ? 'Based on your saved placements'
+              : 'Based on a suggested pathway',
           },
-        ].map(({ label, value, sub, Icon }) => (
-          <article className="stat panel" key={label}>
-            <div className="row">
-              <span>{label}</span>
-              <Icon size={19} />
-            </div>
-            <strong>{value}</strong>
-            <p className="muted">{sub}</p>
-            {label === 'Degree progress' && (
-              <Progress value={stats.progress} aria-label="Degree progress" />
-            )}
+        ].map((k) => (
+          <article className="stat panel" key={k.label}>
+            <span className="stat-label">{k.label}</span>
+            <strong
+              className={k.label === 'Expected graduation' ? 'term-value' : ''}
+            >
+              {k.value}
+            </strong>
+            <p className="muted">{k.detail}</p>
           </article>
         ))}
       </section>
-      {conflicts.length > 0 && (
+      {path.warnings.length > 0 && (
         <Notice tone="warning">
-          Your saved semester plan has {conflicts.length} conflict(s) after
-          record changes.{' '}
+          Your saved plan has {path.warnings.length} conflict(s). Correct them
+          to restore your graduation estimate.{' '}
           <button className="text-button" onClick={() => navigate('planner')}>
             Review plan
           </button>
         </Notice>
       )}
+      <section className="panel progress-panel">
+        <div className="section-heading">
+          <div>
+            <h2>Academic Progress</h2>
+            <p className="muted">
+              Every completed subject moves your pathway forward.
+            </p>
+          </div>
+          <strong>{stats.progress}% complete</strong>
+        </div>
+        <figure
+          className="segmented-progress"
+          aria-label={
+            stats.completedUnits +
+            ' completed units, ' +
+            currentUnits +
+            ' current units, ' +
+            unfinishedUnits +
+            ' other remaining units'
+          }
+        >
+          {stats.totalUnits > 0 ? (
+            <>
+              <span
+                className="segment-completed"
+                style={{
+                  width: (stats.completedUnits / stats.totalUnits) * 100 + '%',
+                }}
+              />
+              <span
+                className="segment-current"
+                style={{ width: (currentUnits / stats.totalUnits) * 100 + '%' }}
+              />
+            </>
+          ) : (
+            <Progress value={stats.progress} aria-label="Subjects completed" />
+          )}
+        </figure>
+        <div className="progress-legend">
+          <span>
+            <i className="dot completed" />
+            <strong>{stats.completedUnits}</strong> completed units
+          </span>
+          <span>
+            <i className="dot current" />
+            <strong>{currentUnits}</strong> current units
+          </span>
+          <span>
+            <i className="dot remaining" />
+            <strong>{unfinishedUnits}</strong> other remaining units
+          </span>
+          <Button variant="ghost" onClick={() => navigate('review')}>
+            Update academic record <ArrowUpRight />
+          </Button>
+        </div>
+      </section>
       <div className="dashboard-grid">
         <section className="panel">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">NEXT STEPS</p>
-              <h2>Ready when you are</h2>
+              <p className="eyebrow">YOUR NEXT STEP</p>
+              <h2>Continue Your Path</h2>
             </div>
             <Button variant="ghost" onClick={() => navigate('planner')}>
-              Plan semester <ArrowUpRight />
+              Plan subjects <ArrowUpRight />
             </Button>
           </div>
           <p className="muted">
-            Eligible based on completed subjects. Term offerings and unit limits
-            apply in the planner.
+            Eligible now. The planner checks availability in your chosen
+            semester.
           </p>
           <div className="subject-grid">
-            {stats.eligible.slice(0, 6).map((s) => (
+            {stats.eligible.slice(0, 4).map((s) => (
               <SubjectCard
                 key={s.code}
                 subject={s}
@@ -132,121 +203,166 @@ export function Dashboard({
             <Blank
               title={
                 stats.remaining
-                  ? 'No subjects are immediately eligible'
-                  : 'All subjects completed'
+                  ? 'No immediately eligible subjects'
+                  : 'Curriculum completed'
               }
             >
               {stats.remaining
-                ? 'Review prerequisite blockers or plan corequisites together.'
-                : 'Your curriculum is complete.'}
+                ? 'Review the blockers below or plan corequisites together.'
+                : 'All recorded subjects have been completed.'}
+            </Blank>
+          )}
+          {stats.eligible.length > 4 && (
+            <Button variant="ghost" onClick={() => navigate('map')}>
+              View all {stats.eligible.length} eligible subjects
+            </Button>
+          )}
+        </section>
+        <section className="panel upcoming-plan">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">LOOKING AHEAD</p>
+              <h2>Upcoming Plan</h2>
+            </div>
+            <Flag size={20} />
+          </div>
+          {next ? (
+            <>
+              <h3>{termLabel(data.settings, next.term)}</h3>
+              <div className="compact-list">
+                {next.codes.map((c) => {
+                  const s = data.curriculum.subjects.find((s) => s.code === c)!;
+                  return (
+                    <button
+                      className="list-row"
+                      key={c}
+                      onClick={() => select(s)}
+                    >
+                      <div>
+                        <strong>{c}</strong>
+                        <p>{s.name}</p>
+                      </div>
+                      <span>{s.units} units</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="record-line">
+                <strong>Total units</strong>
+                <strong>
+                  {next.codes.reduce(
+                    (n, c) =>
+                      n +
+                      data.curriculum.subjects.find((s) => s.code === c)!.units,
+                    0,
+                  )}
+                </strong>
+              </div>
+            </>
+          ) : (
+            <Blank title="Your next semester is open">
+              Add subjects to your semester plan to preview them here.
+            </Blank>
+          )}
+          <Button variant="outline" onClick={() => navigate('planner')}>
+            {next ? 'Edit semester plan' : 'Create semester plan'}{' '}
+            <ArrowUpRight />
+          </Button>
+        </section>
+      </div>
+      <div className="two-columns">
+        <section className="panel table-section">
+          <div className="section-heading">
+            <h2>Current Semester</h2>
+            <BookOpen size={20} />
+          </div>
+          {stats.current.length ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Subject</TableHead>
+                  <TableHead>Units</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {stats.current.map((s) => (
+                  <TableRow key={s.code}>
+                    <TableCell>
+                      <button
+                        className="subject-link"
+                        onClick={() => select(s)}
+                      >
+                        <strong>{s.code}</strong>
+                        <span>{s.name}</span>
+                      </button>
+                    </TableCell>
+                    <TableCell>{s.units}</TableCell>
+                    <TableCell>
+                      <Pill status="current" />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <Blank title="No current subjects marked">
+              Mark your enrolled subjects in Curriculum → Academic record.
             </Blank>
           )}
         </section>
-        <aside className="stack">
-          <section className="graduation-card">
-            <Flag size={26} />
-            <p className="eyebrow">PROJECTED COMPLETION</p>
-            <h2>
-              {projection.graduation === null
-                ? 'More information needed'
-                : projection.graduation === -1
-                  ? stats.remaining === 0
-                    ? 'Curriculum complete'
-                    : 'After current subjects pass'
-                  : termLabel(data.settings, projection.graduation)}
-            </h2>
-            <p>
-              Automatic roadmap · up to {data.settings.maxUnits} units per term
-            </p>
-            <small>
-              {data.settings.assumeCurrentPass
-                ? 'Assumes all current subjects are passed before the first future term.'
-                : 'Current subjects must be resolved before a full forecast is possible.'}{' '}
-              Future subjects are assumed passed; offerings follow your
-              curriculum.
-            </small>
-            <Button variant="secondary" onClick={() => navigate('planner')}>
-              Adjust planning assumptions <ArrowUpRight />
-            </Button>
-          </section>
-          <section className="panel">
-            <h2>Your record</h2>
-            <div className="record-line">
-              <span>Completed subjects</span>
-              <strong>{stats.completed.length}</strong>
-            </div>
-            <div className="record-line">
-              <span>Remaining subjects</span>
-              <strong>{stats.remaining}</strong>
-            </div>
-            <div className="record-line">
-              <span>Remaining units</span>
-              <strong>{stats.remainingUnits}</strong>
-            </div>
-            <Button variant="outline" onClick={() => navigate('review')}>
-              Update subject statuses
-            </Button>
-          </section>
-        </aside>
-      </div>
-      <div className="two-columns">
         <section className="panel">
           <div className="section-heading">
-            <h2>Currently taking</h2>
-            <Pill status="current" />
-          </div>
-          {stats.current.length ? (
-            <div className="compact-list">
-              {stats.current.map((s) => (
-                <button
-                  key={s.code}
-                  className="list-row"
-                  onClick={() => select(s)}
-                >
-                  <div>
-                    <strong>{s.code}</strong>
-                    <p>{s.name}</p>
-                  </div>
-                  <span>{s.units} units</span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p className="muted">
-              Mark your enrolled subjects in Review & mark.
-            </p>
-          )}
-        </section>
-        <section className="panel">
-          <div className="section-heading">
-            <h2>Subjects with the biggest impact</h2>
+            <h2>Important Blockers</h2>
             <Button variant="ghost" onClick={() => navigate('map')}>
               View map
             </Button>
           </div>
-          <p className="muted">
-            Unfinished subjects with the most downstream dependencies.
-          </p>
-          <div className="compact-list">
-            {blockers.map(({ s, count }) => (
-              <button
-                className="list-row"
-                key={s.code}
-                onClick={() => select(s)}
-              >
-                <div>
-                  <strong>{s.code}</strong>
-                  <p>{s.name}</p>
-                </div>
-                <span className="count-badge">{count} downstream</span>
+          {blockers.map(({ s, downstream }) => (
+            <article className="blocker" key={s.code}>
+              <button className="subject-link" onClick={() => select(s)}>
+                <strong>
+                  {subjectLabel(data.curriculum.subjects, s.code)}
+                </strong>
               </button>
-            ))}
-          </div>
+              <p className="muted">
+                {statusOf(data.statuses, s.code) === 'current'
+                  ? 'A passing outcome is still needed.'
+                  : statusOf(data.statuses, s.code) === 'failed'
+                    ? 'This subject needs a passing retake.'
+                    : 'This prerequisite has not been completed.'}{' '}
+                Affects {downstream.length} unfinished subject(s).
+              </p>
+              <div className="edge-list">
+                {prerequisiteEdges(data.curriculum.subjects, s.code)
+                  .filter((e) => statusOf(data.statuses, e.to) !== 'completed')
+                  .slice(0, 3)
+                  .map((e) => (
+                    <p key={e.from + e.to}>
+                      <strong>{e.from}</strong>
+                      <span aria-hidden="true"> → </span>
+                      {subjectLabel(data.curriculum.subjects, e.to)}
+                    </p>
+                  ))}
+              </div>
+            </article>
+          ))}
           {!blockers.length && (
-            <p className="muted">No outstanding prerequisite chains.</p>
+            <Blank title="No outstanding prerequisite chains">
+              <CheckCircle2 size={22} />
+            </Blank>
           )}
         </section>
       </div>
+      <p className="muted estimate-note">
+        Projection: up to {data.settings.maxUnits} units each term; reviewed
+        semester offerings repeat annually.{' '}
+        {data.settings.assumeCurrentPass
+          ? 'Current subjects are assumed passed before the first future term.'
+          : 'Current outcomes are unresolved until marked completed.'}{' '}
+        Unplanned subjects fill available future terms. Future passes are
+        assumed.
+      </p>
     </div>
   );
 }
@@ -264,49 +380,33 @@ export function CurriculumMap({
     () => (focus ? descendants(data.curriculum.subjects, focus) : []),
     [data.curriculum.subjects, focus],
   );
-  const terms = [
-    ...new Set(
-      data.curriculum.subjects.map((s) => (s.year - 1) * 2 + s.semester - 1),
-    ),
-  ].sort((a, b) => a - b);
-  const visible = (s: Subject) =>
-    (s.code + ' ' + s.name).toLowerCase().includes(search.toLowerCase()) &&
-    (filter === 'all' ||
-      (filter === 'remaining'
-        ? statusOf(data.statuses, s.code) !== 'completed'
-        : academicState(s, data.statuses) === filter));
+  const years = [...new Set(data.curriculum.subjects.map((s) => s.year))].sort(
+    (a, b) => a - b,
+  );
+  const shown = data.curriculum.subjects.filter((s) =>
+    matchesSubject(s, data.statuses, search, filter),
+  );
   return (
     <div className="stack">
       <div className="map-toolbar panel">
         <Input
           aria-label="Search subjects"
-          placeholder="Search by code or subject name"
+          placeholder="Search code or title"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
         <Choice
-          label="Filter status"
+          label="Filter map status"
           value={filter}
           onChange={setFilter}
-          options={[
-            'all',
-            'completed',
-            'current',
-            'eligible',
-            'blocked',
-            'remaining',
-          ].map((v) => ({
-            value: v,
-            label:
-              v === 'all' ? 'All statuses' : v[0].toUpperCase() + v.slice(1),
-          }))}
+          options={filterOptions}
         />
         <Choice
           label="Highlight prerequisite chain"
           value={focus}
           onChange={setFocus}
           options={[
-            { value: '', label: 'Highlight a prerequisite chain' },
+            { value: '', label: 'Trace a prerequisite' },
             ...data.curriculum.subjects.map((s) => ({
               value: s.code,
               label: s.code + ' · ' + s.name,
@@ -315,54 +415,90 @@ export function CurriculumMap({
         />
       </div>
       <div className="legend">
-        {['completed', 'current', 'eligible', 'blocked'].map((s) => (
-          <Pill key={s} status={s} />
-        ))}
+        {['completed', 'current', 'eligible', 'blocked', 'remaining'].map(
+          (s) => (
+            <Pill key={s} status={s} />
+          ),
+        )}
         <span className="muted">
-          Remaining = all unfinished subjects, including current and retakes.
+          Remaining includes all unfinished subjects.
         </span>
       </div>
       {focus && (
         <Notice>
-          {focus} affects {related.length} downstream subjects. Highlighted
-          cards show this chain; select any subject for requirements.
+          <strong>{focus}</strong> affects {related.length} downstream subjects.{' '}
+          <button className="text-button" onClick={() => setFocus('')}>
+            Clear trace
+          </button>
+          <div className="edge-list">
+            {prerequisiteEdges(data.curriculum.subjects, focus).map((e) => (
+              <p key={e.from + e.to}>
+                {e.from} → {e.to}
+              </p>
+            ))}
+          </div>
         </Notice>
       )}
-      <div className="map-board">
-        {terms.map((t) => {
-          const subjects = data.curriculum.subjects.filter(
-            (s) => (s.year - 1) * 2 + s.semester - 1 === t && visible(s),
-          );
-          return (
-            <section className="term-column" key={t}>
-              <header>
-                <p className="eyebrow">YEAR {Math.floor(t / 2) + 1}</p>
-                <div className="row">
-                  <h2>Semester {(t % 2) + 1}</h2>
-                  <span>{subjects.reduce((n, s) => n + s.units, 0)} units</span>
+      {!shown.length ? (
+        <Blank title="No matching subjects">
+          Try another status or search term.
+        </Blank>
+      ) : (
+        <div className="map-board">
+          {years.map((year) => {
+            const inYear = shown.filter((s) => s.year === year);
+            if (!inYear.length) return null;
+            return (
+              <section className="year-group" key={year}>
+                <header className="year-heading">
+                  <h2>Year {year}</h2>
+                  <span>
+                    {inYear.length} subjects ·{' '}
+                    {inYear.reduce((n, s) => n + s.units, 0)} units shown
+                  </span>
+                </header>
+                <div className="year-semesters">
+                  {[1, 2].map((sem) => {
+                    const subjects = inYear.filter((s) => s.semester === sem);
+                    return (
+                      <section className="term-column" key={sem}>
+                        <header>
+                          <h3>Semester {sem}</h3>
+                          <span>
+                            {subjects.reduce((n, s) => n + s.units, 0)} units
+                          </span>
+                        </header>
+                        <div className="map-subjects">
+                          {subjects.map((s) => (
+                            <SubjectCard
+                              key={s.code}
+                              subject={s}
+                              data={data}
+                              onSelect={select}
+                              highlight={
+                                s.code === focus || related.includes(s.code)
+                              }
+                            />
+                          ))}
+                        </div>
+                        {!subjects.length && (
+                          <p className="muted">
+                            No subjects match in this semester.
+                          </p>
+                        )}
+                      </section>
+                    );
+                  })}
                 </div>
-              </header>
-              <div className="stack">
-                {subjects.map((s) => (
-                  <SubjectCard
-                    key={s.code}
-                    subject={s}
-                    data={data}
-                    onSelect={select}
-                    highlight={s.code === focus || related.includes(s.code)}
-                  />
-                ))}
-                {!subjects.length && (
-                  <p className="muted">No matching subjects.</p>
-                )}
-              </div>
-            </section>
-          );
-        })}
-      </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
       <p className="muted">
-        Columns show the recommended curriculum sequence. The planner calculates
-        your personal sequence from completed prerequisites.
+        This map shows the recommended curriculum sequence. Select a card to
+        inspect its requirements; your semester plan can follow a different
+        valid sequence.
       </p>
     </div>
   );

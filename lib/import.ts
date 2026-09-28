@@ -12,7 +12,7 @@ function object(value: unknown): Record<string, unknown> {
 }
 function string(value: unknown, label: string, max = 180) {
   if (typeof value !== 'string' || !value.trim() || value.trim().length > max)
-    throw new Error(`${label} must be 1â€“${max} characters.`);
+    throw new Error(`${label} must be 1–${max} characters.`);
   return value.trim();
 }
 function number(
@@ -22,7 +22,10 @@ function number(
   max: number,
   integer = false,
 ) {
-  if (value === '' || value === null || typeof value === 'boolean')
+  if (
+    (typeof value !== 'number' && typeof value !== 'string') ||
+    (typeof value === 'string' && !value.trim())
+  )
     throw new Error(`${label} is required.`);
   const n = Number(value);
   if (
@@ -64,7 +67,7 @@ export function validateCurriculum(value: unknown): Curriculum {
     !c.subjects.length ||
     c.subjects.length > 300
   )
-    throw new Error('A curriculum needs 1â€“300 subjects.');
+    throw new Error('A curriculum needs 1–300 subjects.');
   const subjects: Subject[] = c.subjects.map((raw, i) => {
     const s = object(raw);
     const semester = number(s.semester, `Row ${i + 1} semester`, 1, 2, true);
@@ -117,6 +120,20 @@ export function validateCurriculum(value: unknown): Curriculum {
   subjects.forEach((s) => visit(s.code));
   return {
     name,
+    ...(c.program !== undefined && c.program !== ''
+      ? { program: string(c.program, 'Academic program', 120) }
+      : {}),
+    ...(c.curriculumYear !== undefined && c.curriculumYear !== ''
+      ? {
+          curriculumYear: number(
+            c.curriculumYear,
+            'Curriculum year',
+            1950,
+            2100,
+            true,
+          ),
+        }
+      : {}),
     source: c.source === 'sample' ? 'sample' : 'imported',
     subjects,
   };
@@ -219,6 +236,13 @@ export function validateRecord(value: unknown): RecordData {
   if (typeof settings.assumeCurrentPass !== 'boolean')
     throw new Error('Select the current-subject assumption.');
   return {
+    ...(r.profile !== undefined
+      ? {
+          profile: {
+            name: string(object(r.profile).name, 'Student name', 100),
+          },
+        }
+      : {}),
     curriculum,
     statuses: statuses as RecordData['statuses'],
     plan,

@@ -52,7 +52,12 @@ void test('HTTP flow: auth → import → mark → save → reload → plan → 
     'Test import.csv',
   );
   let data: RecordData = {
-    curriculum,
+    curriculum: {
+      ...curriculum,
+      program: 'Test program',
+      curriculumYear: 2024,
+    },
+    profile: { name: 'Test student' },
     statuses: { CS101: 'completed', CS102: 'current' },
     settings: {
       startYear: 2026,
@@ -82,6 +87,22 @@ void test('HTTP flow: auth → import → mark → save → reload → plan → 
     assert.equal(JSON.stringify(data), before);
     const after = await request('GET');
     assert.deepEqual(after.value.data, data);
+    const invalidPlan = await request('PUT', {
+      data: { ...data, plan: [{ term: 0, codes: ['CS101'] }] },
+      revision,
+    });
+    assert.equal(invalidPlan.res.status, 400);
+    const gradeChange = {
+      ...data,
+      statuses: { ...data.statuses, CS102: 'failed' },
+    };
+    const gradeSaved = await request('PUT', { data: gradeChange, revision });
+    assert.equal(gradeSaved.res.status, 200);
+    revision = gradeSaved.value.revision;
+    assert.ok(planWarnings(gradeSaved.value.data!).length > 0);
+    const repaired = await request('PUT', { data, revision });
+    assert.equal(repaired.res.status, 200);
+    revision = repaired.value.revision;
     const invalid = await request('PUT', {
       data: { ...data, statuses: { GHOST: 'completed' } },
       revision,
@@ -99,7 +120,7 @@ void test('HTTP flow: auth → import → mark → save → reload → plan → 
     assert.equal(workspace.status, 200);
     const html = await workspace.text();
     assert.ok(html.includes('AcadPath'));
-    assert.ok(html.includes('Semester planner'));
+    assert.ok(html.includes('Semester Planner'));
     assert.ok(!html.includes('Internal Server Error'));
   } finally {
     if (original.value.data) {

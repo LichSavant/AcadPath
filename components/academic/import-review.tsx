@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 import { useState, useEffect, type ChangeEvent } from 'react';
 import {
   UploadCloud,
@@ -17,10 +17,16 @@ import {
   TableBody,
   TableCell,
 } from '@/components/ui/table';
-import { importCurriculum, validateCurriculum } from '@/lib/import';
+import {
+  importCurriculum,
+  validateCurriculum,
+  validateRecord,
+} from '@/lib/import';
 import { sampleCurriculum } from '@/lib/sample';
 import {
   defaultSettings,
+  matchesSubject,
+  academicState,
   STATUSES,
   statusOf,
   completedCodes,
@@ -30,7 +36,7 @@ import {
   type Subject,
   type Status,
 } from '@/lib/academic';
-import { Choice, Notice, statusLabels } from './shared';
+import { Choice, Notice, Pill, statusLabels, filterOptions } from './shared';
 export function UploadView({
   hasRecord,
   stage,
@@ -104,9 +110,9 @@ export function UploadView({
             <p className="eyebrow">JUST EXPLORING?</p>
             <h2>Try a sample roadmap</h2>
             <p className="muted">
-              A fictional 4-year Computer Science curriculum with 30 subjects,
-              prerequisite chains, and a corequisite pair. All subjects begin as
-              not taken.
+              A fictional 4-year Computer Science curriculum (not an official
+              USC prospectus) with 30 subjects, prerequisite chains, and a
+              corequisite pair. All subjects begin as not taken.
             </p>
             <Button
               variant="outline"
@@ -157,7 +163,8 @@ export function ReviewView({
   );
   const [error, setError] = useState(''),
     [dirty, setDirty] = useState(!!pending),
-    [search, setSearch] = useState('');
+    [search, setSearch] = useState(''),
+    [filter, setFilter] = useState('all');
   useEffect(() => {
     const handler = (event: BeforeUnloadEvent) => {
       if (dirty) event.preventDefault();
@@ -179,6 +186,7 @@ export function ReviewView({
     try {
       const valid = validateCurriculum(curriculum);
       const next: RecordData = {
+        ...(data?.profile ? { profile: data.profile } : {}),
         curriculum: valid,
         statuses,
         plan: pending ? [] : data!.plan,
@@ -206,7 +214,7 @@ export function ReviewView({
       !eligibility(s, completed, current).eligible,
   );
   const filtered = curriculum.subjects.filter((s) =>
-    (s.code + ' ' + s.name).toLowerCase().includes(search.toLowerCase()),
+    matchesSubject(s, statuses, search, filter),
   );
   return (
     <div className="stack">
@@ -252,6 +260,40 @@ export function ReviewView({
           </Button>
         </div>
       </section>
+      <section className="panel curriculum-context">
+        <label htmlFor="program-name">
+          Academic program
+          <Input
+            id="program-name"
+            value={curriculum.program ?? ''}
+            maxLength={120}
+            onChange={(e) => {
+              setDirty(true);
+              setCurriculum((c) => ({ ...c, program: e.target.value }));
+            }}
+            placeholder="Program on your prospectus"
+          />
+        </label>
+        <label htmlFor="curriculum-year">
+          Curriculum year
+          <Input
+            id="curriculum-year"
+            type="number"
+            min="1950"
+            max="2100"
+            value={curriculum.curriculumYear ?? ''}
+            onChange={(e) => {
+              setDirty(true);
+              setCurriculum((c) => ({
+                ...c,
+                curriculumYear:
+                  e.target.value === '' ? undefined : Number(e.target.value),
+              }));
+            }}
+            placeholder="Curriculum edition year"
+          />
+        </label>
+      </section>
       <p className="muted">
         Edit names, units, sequence, and requirements directly. Separate
         requirement codes with semicolons. Changes remain a draft until saved.
@@ -264,6 +306,17 @@ export function ReviewView({
           subjects will not count as completed.
         </Notice>
       )}
+      <div className="row">
+        <Choice
+          label="Filter academic record"
+          value={filter}
+          onChange={setFilter}
+          options={filterOptions}
+        />
+        <span className="muted">
+          {filtered.length} of {curriculum.subjects.length} subjects
+        </span>
+      </div>
       <section className="panel table-panel">
         <Table>
           <TableHeader>
@@ -280,7 +333,8 @@ export function ReviewView({
             {filtered.map((s) => (
               <TableRow key={s.code}>
                 <TableCell className="subject-edit">
-                  <strong>{s.code}</strong>
+                  <strong>{s.code}</strong>{' '}
+                  <Pill status={academicState(s, statuses)} />
                   <Input
                     aria-label={s.code + ' name'}
                     value={s.name}
@@ -382,5 +436,91 @@ export function ReviewView({
         currently taking · {dirty ? 'Unsaved review draft' : 'No changes yet'}
       </Notice>
     </div>
+  );
+}
+
+export function ProfileSettings({
+  data,
+  name,
+  save,
+  busy,
+}: {
+  data: RecordData;
+  name: string;
+  save: (d: RecordData) => Promise<boolean>;
+  busy: boolean;
+}) {
+  const [studentName, setStudentName] = useState(data.profile?.name ?? name),
+    [program, setProgram] = useState(data.curriculum.program ?? ''),
+    [year, setYear] = useState(
+      data.curriculum.curriculumYear?.toString() ?? '',
+    ),
+    [error, setError] = useState('');
+  async function commit() {
+    setError('');
+    try {
+      const next = validateRecord({
+        ...data,
+        profile: { name: studentName },
+        curriculum: {
+          ...data.curriculum,
+          program: program.trim() || undefined,
+          curriculumYear: year === '' ? undefined : Number(year),
+        },
+      });
+      await save(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Check your profile fields.');
+    }
+  }
+  return (
+    <section className="panel profile-settings">
+      <h2>Student profile</h2>
+      <p className="muted">
+        Your preferred name and curriculum context appear throughout your
+        academic workspace.
+      </p>
+      {error && <Notice tone="warning">{error}</Notice>}
+      <label htmlFor="student-name">
+        Student name
+        <Input
+          id="student-name"
+          value={studentName}
+          maxLength={100}
+          onChange={(e) => setStudentName(e.target.value)}
+        />
+      </label>
+      <label htmlFor="profile-program">
+        Academic program
+        <Input
+          id="profile-program"
+          value={program}
+          maxLength={120}
+          placeholder="Enter the program on your prospectus"
+          onChange={(e) => setProgram(e.target.value)}
+        />
+      </label>
+      <label htmlFor="profile-year">
+        Curriculum year
+        <Input
+          id="profile-year"
+          type="number"
+          min="1950"
+          max="2100"
+          value={year}
+          placeholder="Year of your curriculum edition"
+          onChange={(e) => setYear(e.target.value)}
+        />
+      </label>
+      <p className="muted">
+        Program and curriculum year are entered from your own prospectus. They
+        do not change subject requirements. Planning assumptions are available
+        in Semester Planner.
+      </p>
+      <Button disabled={busy} onClick={() => void commit()}>
+        <Save />
+        {busy ? 'Saving…' : 'Save profile'}
+      </Button>
+    </section>
   );
 }

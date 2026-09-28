@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 import type { ReactNode } from 'react';
 import {
   Select,
@@ -22,11 +22,22 @@ import {
 export const statusLabels: Record<string, string> = {
   completed: 'Completed',
   current: 'Currently taking',
-  remaining: 'Not taken',
+  remaining: 'Remaining',
   failed: 'Failed',
   eligible: 'Eligible',
   blocked: 'Blocked',
 };
+export const filterOptions = [
+  'all',
+  'completed',
+  'current',
+  'eligible',
+  'blocked',
+  'remaining',
+].map((value) => ({
+  value,
+  label: value === 'all' ? 'All subjects' : statusLabels[value],
+}));
 export function Choice({
   label,
   value,

@@ -18,6 +18,8 @@ export type Subject = {
 export type Curriculum = {
   name: string;
   source: 'imported' | 'sample';
+  program?: string;
+  curriculumYear?: number;
   subjects: Subject[];
 };
 export type Settings = {
@@ -28,6 +30,7 @@ export type Settings = {
 };
 export type Plan = { term: number; codes: string[] }[];
 export type RecordData = {
+  profile?: { name: string };
   curriculum: Curriculum;
   statuses: Record<string, Status>;
   plan: Plan;
@@ -104,7 +107,9 @@ export function summary(data: RecordData) {
     remainingUnits: totalUnits - completedUnits,
     progress: totalUnits
       ? Math.round((completedUnits / totalUnits) * 100)
-      : Math.round((completed.length / subjects.length) * 100),
+      : subjects.length
+        ? Math.round((completed.length / subjects.length) * 100)
+        : 0,
   };
 }
 export function descendants(subjects: Subject[], code: string): string[] {
@@ -142,62 +147,188 @@ export function termLabel(settings: Settings, offset: number) {
   const t = termInfo(settings, offset);
   return `AY ${t.year}–${t.year + 1} · Semester ${t.semester}`;
 }
-export function planWarnings(data: RecordData, plan = data.plan): string[] {
-  const errors: string[] = [];
+export type PlanEntry = { code: string; reasons: string[]; eligible: boolean };
+export type TermEvaluation = {
+  term: number;
+  units: number;
+  entries: PlanEntry[];
+  completedCodes: string[];
+  completedUnits: number;
+  remainingUnits: number;
+  progress: number;
+};
+export function futureCompleted(data: RecordData) {
   const completed = completedCodes(data.statuses);
-  const used = new Set<string>();
   if (data.settings.assumeCurrentPass)
-    for (const [c, s] of Object.entries(data.statuses))
-      if (s === 'current') completed.add(c);
+    for (const [code, status] of Object.entries(data.statuses))
+      if (status === 'current') completed.add(code);
+  return completed;
+}
+export function subjectLabel(subjects: Subject[], code: string) {
+  const subject = subjects.find((s) => s.code === code);
+  return subject ? `${code} – ${subject.name}` : code;
+}
+export function evaluatePlan(data: RecordData, plan = data.plan) {
+  const completed = futureCompleted(data),
+    used = new Set<string>();
+  const subjects = data.curriculum.subjects,
+    byCode = new Map(subjects.map((s) => [s.code, s]));
+  const totalUnits = subjects.reduce((n, s) => n + s.units, 0);
+  const terms: TermEvaluation[] = [];
+  const warnings: string[] = [];
   for (const term of [...plan].sort((a, b) => a.term - b.term)) {
-    const concurrent = new Set(term.codes);
-    let units = 0;
-    for (const code of term.codes) {
-      const s = data.curriculum.subjects.find((s) => s.code === code);
-      if (!s) {
-        errors.push(`Unknown subject ${code}.`);
-        continue;
+    const units = term.codes.reduce(
+      (n, c) => n + (byCode.get(c)?.units ?? 0),
+      0,
+    );
+    const overLimit = units > data.settings.maxUnits;
+    const entries: PlanEntry[] = term.codes.map((code) => {
+      const s = byCode.get(code),
+        reasons: string[] = [];
+      if (!s) reasons.push('Unknown subject.');
+      else {
+        if (used.has(code)) reasons.push('Subject is planned more than once.');
+        if (completed.has(code) && !used.has(code))
+          reasons.push('Subject is already completed or assumed passed.');
+        if (
+          statusOf(data.statuses, code) === 'current' &&
+          !data.settings.assumeCurrentPass
+        )
+          reasons.push(
+            'Resolve the current subject outcome before planning a retake.',
+          );
+        const missing = s.prerequisites.filter((p) => !completed.has(p));
+        if (missing.length)
+          reasons.push(
+            `Prerequisite not satisfied. Requires: ${missing.map((p) => subjectLabel(subjects, p)).join('; ')}. Complete before term ${term.term + 1}.`,
+          );
+        if (!s.offered.includes(termInfo(data.settings, term.term).semester))
+          reasons.push('Not offered in this semester.');
+        if (overLimit)
+          reasons.push(
+            `Term ${term.term + 1} exceeds ${data.settings.maxUnits} units (${units}).`,
+          );
       }
-      units += s.units;
-      if (used.has(code)) errors.push(`${code} is planned more than once.`);
-      if (completed.has(code) && !used.has(code))
-        errors.push(`${code} is already completed or assumed passed.`);
-      if (
-        statusOf(data.statuses, code) === 'current' &&
-        !data.settings.assumeCurrentPass
-      )
-        errors.push(
-          `${code} is currently taking; resolve its outcome before planning a retake.`,
-        );
-      const e = eligibility(s, completed, concurrent);
-      if (e.prerequisites.length)
-        errors.push(
-          `${code}: complete ${e.prerequisites.join(', ')} before term ${term.term + 1}.`,
-        );
-      if (e.corequisites.length)
-        errors.push(
-          `${code}: take ${e.corequisites.join(', ')} together or earlier.`,
-        );
-      if (!s.offered.includes(termInfo(data.settings, term.term).semester))
-        errors.push(`${code} is not offered in term ${term.term + 1}.`);
       used.add(code);
-    }
-    if (units > data.settings.maxUnits)
-      errors.push(
-        `Term ${term.term + 1} exceeds ${data.settings.maxUnits} units (${units}).`,
-      );
-    // Invalid subjects never unlock later prerequisites.
-    const valid = term.codes.filter((code) => {
-      const s = data.curriculum.subjects.find((s) => s.code === code);
-      return (
-        s &&
-        eligibility(s, completed, concurrent).eligible &&
-        s.offered.includes(termInfo(data.settings, term.term).semester)
-      );
+      return { code, reasons, eligible: reasons.length === 0 };
     });
-    for (const code of valid) completed.add(code);
+    // Eliminate invalid concurrent subjects to a fixed point: an unavailable
+    // corequisite must never unlock its partner or later prerequisite chains.
+    let changed = true;
+    while (changed) {
+      changed = false;
+      const concurrent = new Set(
+        entries.filter((e) => e.eligible).map((e) => e.code),
+      );
+      for (const entry of entries)
+        if (entry.eligible) {
+          const missing = byCode
+            .get(entry.code)!
+            .corequisites.filter(
+              (c) => !completed.has(c) && !concurrent.has(c),
+            );
+          if (missing.length) {
+            entry.reasons.push(
+              `Corequisite not satisfied. Take ${missing.map((c) => subjectLabel(subjects, c)).join('; ')} together in a valid term or earlier.`,
+            );
+            entry.eligible = false;
+            changed = true;
+          }
+        }
+    }
+    for (const entry of entries) {
+      if (entry.eligible) completed.add(entry.code);
+      for (const reason of entry.reasons)
+        warnings.push(`${entry.code}: ${reason}`);
+    }
+    const completedUnits = subjects
+      .filter((s) => completed.has(s.code))
+      .reduce((n, s) => n + s.units, 0);
+    terms.push({
+      term: term.term,
+      units,
+      entries,
+      completedCodes: [...completed],
+      completedUnits,
+      remainingUnits: totalUnits - completedUnits,
+      progress: totalUnits
+        ? Math.round((completedUnits / totalUnits) * 100)
+        : Math.round((completed.size / subjects.length) * 100),
+    });
   }
-  return errors;
+  const unresolved = subjects
+    .filter((s) => !completed.has(s.code))
+    .map((s) => s.code);
+  return {
+    terms,
+    warnings,
+    unresolved,
+    graduation:
+      warnings.length || unresolved.length
+        ? null
+        : terms.length
+          ? terms.at(-1)!.term
+          : -1,
+  };
+}
+export function planWarnings(data: RecordData, plan = data.plan) {
+  return evaluatePlan(data, plan).warnings;
+}
+export function movePlannedSubject(
+  plan: Plan,
+  code: string,
+  term: number | null,
+): Plan {
+  const result = plan.map((t) => ({
+    ...t,
+    codes: t.codes.filter((c) => c !== code),
+  }));
+  if (term !== null) {
+    const target = result.find((t) => t.term === term);
+    if (target) target.codes.push(code);
+    else result.push({ term, codes: [code] });
+  }
+  return result.filter((t) => t.codes.length).sort((a, b) => a.term - b.term);
+}
+export function candidateEligibility(
+  data: RecordData,
+  code: string,
+  term: number,
+) {
+  const trial = movePlannedSubject(data.plan, code, term);
+  return (
+    evaluatePlan(data, trial)
+      .terms.find((t) => t.term === term)
+      ?.entries.find((e) => e.code === code) ?? {
+      code,
+      eligible: false,
+      reasons: ['Choose a valid subject and term.'],
+    }
+  );
+}
+export function matchesSubject(
+  subject: Subject,
+  statuses: Record<string, Status>,
+  search: string,
+  filter: string,
+) {
+  return (
+    (subject.code + ' ' + subject.name)
+      .toLowerCase()
+      .includes(search.trim().toLowerCase()) &&
+    (filter === 'all' ||
+      (filter === 'remaining'
+        ? statusOf(statuses, subject.code) !== 'completed'
+        : academicState(subject, statuses) === filter))
+  );
+}
+export function prerequisiteEdges(subjects: Subject[], root: string) {
+  const chain = new Set([root, ...descendants(subjects, root)]);
+  return subjects.flatMap((s) =>
+    s.prerequisites
+      .filter((p) => chain.has(p) && chain.has(s.code))
+      .map((p) => ({ from: p, to: s.code })),
+  );
 }
 export function forecast(
   data: RecordData,
@@ -274,30 +405,104 @@ export function forecast(
     graduation: unresolved.length ? null : plan.length ? plan.at(-1)!.term : -1,
   };
 }
+export function projectPath(data: RecordData) {
+  const pinned = Object.fromEntries(
+    data.plan.flatMap((t) => t.codes.map((c) => [c, t.term])),
+  );
+  const result = forecast(data, {}, pinned);
+  const warnings = planWarnings(data);
+  return {
+    ...result,
+    warnings,
+    graduation: warnings.length ? null : result.graduation,
+  };
+}
+export function graduationLabel(data: RecordData, graduation: number | null) {
+  if (graduation === null) return 'Unresolved';
+  if (graduation === -1)
+    return summary(data).remaining === 0
+      ? 'Curriculum complete'
+      : 'After current subjects pass';
+  return termLabel(data.settings, graduation);
+}
 export type Scenario = {
   code: string;
-  action: 'fail' | 'pass' | 'delay' | 'move';
+  action: 'fail' | 'pass' | 'delay' | 'move' | 'add' | 'remove';
   term: number;
 };
 export function simulate(data: RecordData, scenario: Scenario) {
+  if (
+    !Number.isInteger(scenario.term) ||
+    scenario.term < 0 ||
+    scenario.term > 23
+  )
+    throw new Error('Choose a future term from 1 to 24.');
   const copy: RecordData = structuredClone(data);
-  const delays: Record<string, number> = {};
-  const pinned: Record<string, number> = {};
   const subject = copy.curriculum.subjects.find(
     (s) => s.code === scenario.code,
   );
   if (!subject) throw new Error('Choose a subject.');
+  if (
+    !['fail', 'pass', 'delay', 'move', 'add', 'remove'].includes(
+      scenario.action,
+    )
+  )
+    throw new Error('Choose a supported scenario.');
+  if (statusOf(copy.statuses, scenario.code) === 'completed')
+    throw new Error('Choose an unfinished subject.');
+  if (
+    scenario.action === 'pass' &&
+    statusOf(copy.statuses, scenario.code) !== 'current'
+  )
+    throw new Error(
+      'Only a current subject can be marked passed in this scenario.',
+    );
+  if (
+    scenario.action === 'add' &&
+    (statusOf(copy.statuses, scenario.code) === 'current' ||
+      copy.plan.some((t) => t.codes.includes(scenario.code)))
+  )
+    throw new Error('Choose an unplanned subject.');
+  const affected = descendants(copy.curriculum.subjects, scenario.code);
   if (scenario.action === 'pass') copy.statuses[scenario.code] = 'completed';
   else if (scenario.action === 'fail') copy.statuses[scenario.code] = 'failed';
-  else {
+  else if (scenario.action === 'delay' || scenario.action === 'move')
     copy.statuses[scenario.code] = 'remaining';
-    if (scenario.action === 'delay') delays[scenario.code] = scenario.term;
-    else pinned[scenario.code] = scenario.term;
+  const delays: Record<string, number> = {},
+    pinned: Record<string, number> = {};
+  if (
+    scenario.action === 'fail' &&
+    statusOf(data.statuses, scenario.code) !== 'current'
+  ) {
+    const attempt = projectPath(data).plan.find((t) =>
+      t.codes.includes(scenario.code),
+    )?.term;
+    if (attempt !== undefined) delays[scenario.code] = attempt + 1;
   }
-  return {
-    data: copy,
-    summary: summary(copy),
-    forecast: forecast(copy, delays, pinned),
-    affected: descendants(copy.curriculum.subjects, scenario.code),
-  };
+  // Keep unaffected saved placements. Recompute the changed chain rather than
+  // retaining impossible downstream dates after a failed/delayed prerequisite.
+  for (const t of copy.plan)
+    for (const c of t.codes)
+      if (
+        c !== scenario.code &&
+        !affected.includes(c) &&
+        !futureCompleted(copy).has(c)
+      )
+        pinned[c] = t.term;
+  if (scenario.action === 'delay') delays[scenario.code] = scenario.term;
+  if (scenario.action === 'move' || scenario.action === 'add')
+    pinned[scenario.code] = scenario.term;
+  if (scenario.action === 'remove') {
+    const original =
+      data.plan.find((t) => t.codes.includes(scenario.code))?.term ??
+      projectPath(data).plan.find((t) => t.codes.includes(scenario.code))?.term;
+    if (original === undefined)
+      throw new Error('Choose a subject in the current path.');
+    // Removing a requirement from a semester does not waive it. Find its next
+    // feasible offering strictly after the removed placement.
+    delays[scenario.code] = original + 1;
+  }
+  const result = forecast(copy, delays, pinned);
+  copy.plan = result.plan;
+  return { data: copy, summary: summary(copy), forecast: result, affected };
 }

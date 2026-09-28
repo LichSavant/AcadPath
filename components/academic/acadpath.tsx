@@ -4,13 +4,13 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   GraduationCap,
   LayoutDashboard,
-  Upload,
   ListChecks,
   GitBranch,
   CalendarDays,
   FlaskConical,
   LogOut,
   ArrowUpRight,
+  Settings,
 } from 'lucide-react';
 import {
   SidebarProvider,
@@ -22,6 +22,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarTrigger,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import {
   Sheet,
@@ -44,26 +45,30 @@ import {
   summary,
 } from '@/lib/academic';
 import { Dashboard, CurriculumMap } from './overview';
-import { UploadView, ReviewView } from './import-review';
+import { UploadView, ReviewView, ProfileSettings } from './import-review';
 import { Planner, Simulator } from './planning';
 import { Pill, Notice, Blank } from './shared';
 
 const pages = [
   ['dashboard', 'Dashboard', LayoutDashboard],
-  ['upload', 'Upload prospectus', Upload],
-  ['review', 'Review & mark', ListChecks],
-  ['map', 'Curriculum map', GitBranch],
-  ['planner', 'Semester planner', CalendarDays],
-  ['simulator', 'What-if simulator', FlaskConical],
+  ['review', 'Curriculum', ListChecks],
+  ['map', 'Curriculum Map', GitBranch],
+  ['planner', 'Semester Planner', CalendarDays],
+  ['simulator', 'What-If Simulator', FlaskConical],
+  ['settings', 'Profile / Settings', Settings],
 ] as const;
-type Page = (typeof pages)[number][0];
-export default function AcadPath({
-  name,
-  local,
-}: {
-  name: string;
-  local: boolean;
-}) {
+type Page = (typeof pages)[number][0] | 'upload';
+export default function AcadPath(props: { name: string; local: boolean }) {
+  return (
+    <SidebarProvider
+      style={{ '--sidebar-width': '15rem' } as React.CSSProperties}
+    >
+      <AcademicWorkspace {...props} />
+    </SidebarProvider>
+  );
+}
+function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
+  const { setOpenMobile } = useSidebar();
   const [data, setData] = useState<RecordData | null>(null),
     [revision, setRevision] = useState(0),
     [loading, setLoading] = useState(true),
@@ -87,7 +92,7 @@ export default function AcadPath({
       setRevision(result.revision);
       const hash = location.hash.slice(1);
       setPage(
-        pages.some((p) => p[0] === hash)
+        hash === 'upload' || pages.some((p) => p[0] === hash)
           ? (hash as Page)
           : result.data
             ? 'dashboard'
@@ -108,6 +113,8 @@ export default function AcadPath({
     return () => controller.abort();
   }, [load]);
   const navigate = (next: Page) => {
+    setOpenMobile(false);
+    window.scrollTo({ top: 0, behavior: 'instant' });
     setPage(next);
     setMessage('');
     history.replaceState(null, '', '#' + next);
@@ -146,6 +153,11 @@ export default function AcadPath({
     navigate('review');
   };
   const stats = useMemo(() => (data ? summary(data) : null), [data]);
+  const studentName = data?.profile?.name ?? name;
+  const pageLabel =
+    page === 'upload'
+      ? 'Import curriculum'
+      : pages.find((p) => p[0] === page)?.[1];
   useEffect(() => {
     const context = (
       document as Document & {
@@ -194,42 +206,56 @@ export default function AcadPath({
     return () => lifecycle.abort();
   }, [data]);
   return (
-    <SidebarProvider>
+    <>
       <Sidebar>
         <SidebarHeader className="nav-brand">
           <div className="brand">
             <GraduationCap />
-            AcadPath<span>YOUR ACADEMIC ROADMAP</span>
+            AcadPath<span>University of San Carlos</span>
           </div>
         </SidebarHeader>
         <SidebarContent className="nav-content">
           <p className="nav-label">WORKSPACE</p>
           <SidebarMenu>
-            {pages.map(([id, label, Icon]) => (
-              <SidebarMenuItem key={id}>
-                <SidebarMenuButton
-                  isActive={page === id}
-                  onClick={() => navigate(id)}
-                  disabled={busy}
-                  className="nav-button"
-                >
-                  <Icon />
-                  <span>{label}</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
+            {pages
+              .filter((p) => p[0] !== 'settings')
+              .map(([id, label, Icon]) => (
+                <SidebarMenuItem key={id}>
+                  <SidebarMenuButton
+                    isActive={
+                      page === id || (id === 'review' && page === 'upload')
+                    }
+                    onClick={() => navigate(id)}
+                    disabled={busy}
+                    className="nav-button"
+                  >
+                    <Icon />
+                    <span>{label}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
           </SidebarMenu>
           <div className="nav-note">
-            <GitBranch size={24} />
-            <strong>Every subject connects.</strong>
-            <p>Understand what unlocks your next step.</p>
+            <p className="nav-label">ACADEMIC PATHWAY</p>
+            <p>Curriculum → Progress → Eligibility → Semester plan</p>
           </div>
         </SidebarContent>
         <SidebarFooter className="nav-footer">
-          <div className="row">
-            <span className="avatar">{name.slice(0, 1).toUpperCase()}</span>
+          <SidebarMenuButton
+            className="nav-button"
+            isActive={page === 'settings'}
+            onClick={() => navigate('settings')}
+            disabled={busy}
+          >
+            <Settings />
+            <span>Profile / Settings</span>
+          </SidebarMenuButton>
+          <div className="row profile-summary">
+            <span className="avatar">
+              {studentName.slice(0, 1).toUpperCase()}
+            </span>
             <div>
-              <strong>{name}</strong>
+              <strong>{studentName}</strong>
               <small>
                 {local ? 'Local development profile' : 'Student workspace'}
               </small>
@@ -237,7 +263,7 @@ export default function AcadPath({
           </div>
           <a href="/signout-with-chatgpt?return_to=/" target="_top">
             <LogOut size={16} />
-            Sign out
+            Logout
           </a>
         </SidebarFooter>
       </Sidebar>
@@ -245,10 +271,14 @@ export default function AcadPath({
         <header className="topbar">
           <div className="row">
             <SidebarTrigger />
-            <span>Academic workspace</span>
-            <span className="muted">/</span>
-            <strong>{pages.find((p) => p[0] === page)?.[1]}</strong>
+            <strong>{pageLabel}</strong>
           </div>
+          <span className="topbar-context">
+            {data?.curriculum.program ?? 'USC Cebu · Student workspace'}
+            {data?.curriculum.curriculumYear
+              ? ` · Curriculum ${data.curriculum.curriculumYear}`
+              : ''}
+          </span>
           <span className="save-state">
             {busy ? 'Saving…' : data ? 'Saved record' : 'Get started'}
           </span>
@@ -258,13 +288,17 @@ export default function AcadPath({
             <div>
               <p className="eyebrow">
                 {page === 'dashboard'
-                  ? 'YOUR PROGRESS, AT A GLANCE'
-                  : 'BUILD YOUR ACADEMIC PATH'}
+                  ? 'YOUR ACADEMIC PATHWAY'
+                  : 'UNIVERSITY OF SAN CARLOS · CEBU'}
               </p>
-              <h1>{pages.find((p) => p[0] === page)?.[1]}</h1>
+              <h1>
+                {page === 'dashboard' ? `Good day, ${studentName}` : pageLabel}
+              </h1>
               <p className="muted">
-                {data?.curriculum.name ??
-                  'Start with your curriculum. Plan with confidence.'}
+                {page === 'dashboard'
+                  ? "Here's your academic progress."
+                  : (data?.curriculum.name ??
+                    'Start with your curriculum. Plan with confidence.')}
               </p>
             </div>
             {data && (
@@ -298,6 +332,20 @@ export default function AcadPath({
             </Blank>
           ) : (
             <>
+              {page === 'review' && (
+                <div className="curriculum-actions">
+                  <p className="muted">
+                    Review your prospectus and update your academic record.
+                  </p>
+                  <Button
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => navigate('upload')}
+                  >
+                    Import or select curriculum <ArrowUpRight />
+                  </Button>
+                </div>
+              )}
               {page === 'upload' && (
                 <UploadView hasRecord={!!data} stage={stage} />
               )}
@@ -308,7 +356,10 @@ export default function AcadPath({
                   pending={pending}
                   save={save}
                   busy={busy}
-                  onDone={() => navigate('dashboard')}
+                  onDone={() => {
+                    navigate('dashboard');
+                    setMessage('Your academic record has been saved.');
+                  }}
                   cancel={() => {
                     setPending(null);
                     navigate(data ? 'dashboard' : 'upload');
@@ -316,7 +367,7 @@ export default function AcadPath({
                 />
               ) : page === 'review' ? (
                 <Blank title="No curriculum to review">
-                  Import a curriculum first.
+                  Import your prospectus or select the sample curriculum above.
                 </Blank>
               ) : null}
               {data && page === 'dashboard' && (
@@ -334,6 +385,15 @@ export default function AcadPath({
                 <Planner key={revision} data={data} save={save} busy={busy} />
               )}
               {data && page === 'simulator' && <Simulator data={data} />}
+              {data && page === 'settings' && (
+                <ProfileSettings
+                  key={revision}
+                  data={data}
+                  name={name}
+                  save={save}
+                  busy={busy}
+                />
+              )}
               {!data && !['upload', 'review'].includes(page) && (
                 <Blank title="Your roadmap starts here">
                   <p>
@@ -420,7 +480,7 @@ export default function AcadPath({
           )}
         </SheetContent>
       </Sheet>
-    </SidebarProvider>
+    </>
   );
 }
 function RequirementList({

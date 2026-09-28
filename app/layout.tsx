@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 import './globals.css';
 export const metadata: Metadata = {
-  title: 'AcadPath · Academic planning',
+  title: 'AcadPath · USC Academic Planning',
   description:
-    'Your prerequisite-aware academic roadmap, semester planner, and what-if simulator.',
+    'A prerequisite-aware academic roadmap for University of San Carlos students, semester planner, and what-if simulator.',
 };
 export default function RootLayout({
   children,

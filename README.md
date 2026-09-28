@@ -1,6 +1,6 @@
 ﻿# AcadPath
 
-A prerequisite-aware student academic planning system. The workspace was empty; this project was created with the Sites Vinext/React starter, TypeScript, and Cloudflare D1. No prior application or database was replaced.
+A prerequisite-aware academic pathway planner for University of San Carlos (USC), Cebu students. Built on the existing Sites Vinext/React, TypeScript, and Cloudflare D1 architecture. The USC-inspired green, white, and restrained gold interface uses text branding and a generic academic icon; no official logo or institutional curriculum is implied.
 
 ## Run locally
 
@@ -27,9 +27,9 @@ npm.cmd run build
 npm.cmd run test:flow
 ```
 
-The 20 academic tests cover eligibility, all-of prerequisites, chains, failed grades, progress, unit limits, offerings, corequisites, invalid plans, CSV/JSON errors, forecast delays, and simulation isolation. The HTTP flow checks sign-in, import, mark/save, reload, planning, scenario isolation, stale revision rejection, invalid input, cross-origin rejection, and server-rendered workspace output. It restores an existing local record; on a fresh database it leaves the test fixture. Run it against the local development profile only.
+The 28 academic tests cover eligibility, all-of prerequisites, chains, failed grades, progress, unit limits, offerings, corequisites, invalid plans, CSV/JSON errors, forecast delays, simulation isolation, invalid concurrent chains, saved-plan projections, profile validation, and future retakes. The HTTP flow checks sign-in, import, mark/save, reload, planning, scenario isolation, stale revision rejection, invalid input, conflicting plan rejection, retained grade-induced conflicts, profile persistence, cross-origin rejection, and server-rendered workspace output. It restores an existing local record; on a fresh database it leaves the test fixture. Run it against the local development profile only.
 
-Lint targets application-owned code; the generated shadcn catalog is retained unchanged. Browser click/keyboard/visual testing and the optional WebMCP read tool have not been verified in this environment because no browser surface is connected.
+Lint targets application-owned code; the generated shadcn catalog is retained unchanged. The optional WebMCP read tool requires a browser exposing `document.modelContext`.
 
 ## Student flow
 
@@ -38,9 +38,10 @@ Lint targets application-owned code; the generated shadcn catalog is retained un
 3. Save the review. Dashboard statistics and the curriculum map derive from this saved record.
 4. Set the first future term and unit limit. Explicitly choose whether to assume current subjects pass.
 5. Generate a suggested plan or arrange subjects manually. Missing prerequisites, corequisites, duplicate enrollment, unavailable offerings, and excessive loads are shown; a conflicting draft plan cannot be saved from the planner.
-6. Explore fail, pass, delay, or exact-term move scenarios. Simulator state never calls the save API.
+6. Explore fail, pass, delay, move, add, or remove scenarios. Simulator state never calls the save API. A failed future attempt postpones its retake; removing a planned subject defers it without waiving its required units.
+7. Set your preferred name, academic program, and curriculum edition in Profile / Settings.
 
-A new curriculum replaces the previous curriculum, statuses, and plan only when its review is saved. Grade updates may make an existing plan invalid; those warnings remain visible rather than silently discarding the real grade change.
+A new curriculum replaces the previous curriculum, statuses, and plan only when its review is saved. Both the planner and API reject new conflicting plan/settings edits. Grade or curriculum updates may make an unchanged existing plan invalid; those warnings remain visible rather than silently discarding the real record change.
 
 ## Import format
 
@@ -69,7 +70,8 @@ Limits: 1 MB, 300 subjects, year levels 1–8, semesters 1–2, 0–30 units per
 ## Model and academic rules
 
 - **Student**: server-authenticated user ID and display name.
-- **Curriculum**: name, source (`sample` or `imported`), subjects.
+- **Curriculum**: name, optional program and curriculum year, source (`sample` or `imported`), subjects.
+- **Profile**: optional preferred student name, stored in the same validated record.
 - **Subject**: unique code, name, units, recommended year/semester, offered semesters.
 - **Relationships**: prerequisite and corequisite code arrays validated against the curriculum.
 - **Academic record**: per-subject status; omitted status means remaining.
@@ -82,6 +84,8 @@ Prerequisites require **completed** status. Current subjects never affect eligib
 
 `lib/academic.ts` owns eligibility, summaries, chains, plan validation, term labels, forecasting, and simulation. `lib/import.ts` owns file and API validation. UI pages reuse these functions.
 
+The profile and curriculum context fields are optional additions to the existing JSON record. Existing records remain compatible; no new database migration is required.
+
 ## Migrations and deployment
 
 Schema: `db/schema.ts`. To extend it, run `npm.cmd run db:generate`, inspect the generated migration, then `npm.cmd run db:migrate` locally. Retain applied migrations and metadata. Sites applies packaged migrations to its production D1 database during deployment. Local and hosted databases are separate.
@@ -92,9 +96,9 @@ Schema: `db/schema.ts`. To extend it, run `npm.cmd run db:generate`, inspect the
 
 - Two-semester calendars only; no summer terms, irregular offering dates, section capacity, grade thresholds, alternative/OR prerequisites, residency rules, or institutional overrides.
 - The automatic scheduler is a deterministic heuristic with a 24-term horizon, not an optimal graduation guarantee. It assumes future passes and repeats reviewed semester offerings annually.
-- Dashboard and simulator estimates use the automatic roadmap and saved settings. Manually arranged plans are checked for conflicts but do not change that automatic estimate.
+- Dashboard and simulator projections retain valid saved placements and fill remaining terms with the automatic scheduler. Invalid saved plans suppress graduation estimates until resolved.
 - Simulation compares one change at a time and is never saved. It does not change the real grade record or existing plan.
 - Local authentication is a development identity; production accounts require Sites/ChatGPT sign-in.
 - CSV/JSON parsing is real. Unstructured document OCR is not implemented.
-- Browser interaction and responsive visual checks remain to be performed in a connected browser.
+- Browser verification covered desktop dashboard/map/planner/simulator, subject details, status editing with saved recalculation, disabled invalid-plan saving, a 390px mobile viewport with no horizontal overflow, and mobile navigation. The original local fixture status was restored after the check.
 

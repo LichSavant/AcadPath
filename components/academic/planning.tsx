@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import { useMemo, useState } from 'react';
 import {
   CalendarDays,
@@ -12,19 +12,27 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Progress } from '@/components/ui/progress';
 import {
   forecast,
-  planWarnings,
+  projectPath,
+  graduationLabel,
+  evaluatePlan,
+  candidateEligibility,
+  movePlannedSubject,
   termLabel,
   simulate,
   summary,
   statusOf,
+  prerequisiteEdges,
+  subjectLabel,
   type RecordData,
   type Plan,
   type Scenario,
 } from '@/lib/academic';
 import { validateRecord } from '@/lib/import';
-import { Choice, Notice, Blank } from './shared';
+import { Choice, Notice, Blank, Pill } from './shared';
+
 export function Planner({
   data,
   save,
@@ -37,57 +45,47 @@ export function Planner({
   const [draft, setDraft] = useState<RecordData>(() => structuredClone(data)),
     [error, setError] = useState(''),
     [termCount, setTermCount] = useState(
-      Math.max(4, ...data.plan.map((t) => t.term + 1)),
-    );
-  const warnings = useMemo(() => planWarnings(draft), [draft]);
-  const projection = useMemo(() => forecast(draft), [draft]);
+      Math.max(2, ...data.plan.map((t) => t.term + 1)),
+    ),
+    [activeTerm, setActiveTerm] = useState(0),
+    [search, setSearch] = useState(''),
+    [filter, setFilter] = useState('all');
+  const evaluation = useMemo(() => evaluatePlan(draft), [draft]);
+  const projection = useMemo(() => projectPath(draft), [draft]);
   const used = new Set(draft.plan.flatMap((t) => t.codes));
-  const remaining = draft.curriculum.subjects.filter(
-    (s) =>
-      !['completed', 'current'].includes(statusOf(draft.statuses, s.code)) &&
-      !used.has(s.code),
-  );
-  function setPlan(plan: Plan) {
+  const candidates = draft.curriculum.subjects
+    .filter(
+      (s) =>
+        !['completed', 'current'].includes(statusOf(draft.statuses, s.code)) &&
+        !used.has(s.code) &&
+        (s.code + ' ' + s.name).toLowerCase().includes(search.toLowerCase()),
+    )
+    .map((s) => ({
+      s,
+      result: candidateEligibility(draft, s.code, activeTerm),
+    }))
+    .filter((c) => filter === 'all' || c.result.eligible);
+  function changePlan(plan: Plan) {
     setDraft((d) => ({ ...d, plan }));
   }
-  function add(term: number, code: string) {
-    const existing = draft.plan.find((t) => t.term === term);
-    setPlan(
-      existing
-        ? draft.plan.map((t) =>
-            t.term === term ? { ...t, codes: [...t.codes, code] } : t,
-          )
-        : [...draft.plan, { term, codes: [code] }],
-    );
-  }
-  function remove(term: number, code: string) {
-    setPlan(
-      draft.plan.map((t) =>
-        t.term === term
-          ? { ...t, codes: t.codes.filter((c) => c !== code) }
-          : t,
-      ),
-    );
-  }
   function generate() {
-    setPlan(projection.plan);
-    setTermCount(Math.max(4, projection.plan.length));
+    const suggested = forecast(draft);
+    changePlan(suggested.plan);
+    setTermCount(Math.max(2, suggested.plan.length));
     setError('');
   }
   async function commit() {
     setError('');
     try {
       const valid = validateRecord(draft);
-      if (planWarnings(valid).length)
-        throw new Error(
-          'Resolve prerequisite and unit conflicts before saving the plan.',
-        );
+      if (evaluatePlan(valid).warnings.length)
+        throw new Error('Resolve plan conflicts before saving.');
       await save(valid);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Invalid planning settings.');
     }
   }
-  const plannedUnits = draft.plan
+  const totalUnits = draft.plan
     .flatMap((t) => t.codes)
     .reduce(
       (n, c) =>
@@ -98,11 +96,8 @@ export function Planner({
     <div className="stack">
       <section className="panel settings-panel">
         <div className="section-heading">
-          <div>
-            <p className="eyebrow">PLANNING ASSUMPTIONS</p>
-            <h2>Your first future semester</h2>
-          </div>
-          <CalendarDays />
+          <h2>Planning assumptions</h2>
+          <CalendarDays size={20} />
         </div>
         <div className="settings-grid">
           <label htmlFor="start-year">
@@ -142,7 +137,7 @@ export function Planner({
             />
           </div>
           <label htmlFor="max-units">
-            Maximum units per term
+            Maximum units per semester
             <Input
               id="max-units"
               type="number"
@@ -170,29 +165,30 @@ export function Planner({
               }))
             }
           />
-          Assume I pass all currently taken subjects before this future semester
+          Assume current subjects pass before this future semester
         </label>
         <p className="muted">
-          Prerequisites must be passed in an earlier term. Corequisites may be
-          taken together. Offerings follow the reviewed curriculum; all future
-          planned subjects are assumed passed.
+          Prerequisites must be passed earlier. Corequisites may be taken
+          together. Future passes and reviewed term offerings are assumed.
         </p>
       </section>
       <div className="action-bar">
         <div>
-          <strong>
-            {draft.plan.flatMap((t) => t.codes).length} planned subjects
-          </strong>
-          <span className="muted"> · {plannedUnits} units</span>
+          <strong>{used.size} planned subjects</strong>
+          <span className="muted">
+            {' '}
+            · {totalUnits} units · Unsaved changes stay in this workspace until
+            you save
+          </span>
         </div>
         <div className="row">
-          <Button variant="outline" onClick={generate}>
+          <Button variant="outline" onClick={generate} disabled={busy}>
             <WandSparkles />
             Generate suggested plan
           </Button>
           <Button
             onClick={() => void commit()}
-            disabled={busy || warnings.length > 0}
+            disabled={busy || evaluation.warnings.length > 0}
           >
             <Save />
             {busy ? 'Saving…' : 'Save plan & settings'}
@@ -200,109 +196,233 @@ export function Planner({
         </div>
       </div>
       {error && <Notice tone="warning">{error}</Notice>}
-      {warnings.length > 0 && (
+      {evaluation.warnings.length > 0 && (
         <Notice tone="warning">
-          <strong>Resolve these conflicts before saving</strong>
+          <strong>Plan needs attention</strong>
           <ul className="help-list">
-            {warnings.map((w, i) => (
+            {evaluation.warnings.map((w, i) => (
               <li key={i}>{w}</li>
             ))}
           </ul>
         </Notice>
       )}
-      {projection.unresolved.length > 0 && (
-        <Notice tone="warning">
-          A full graduation estimate is unavailable. Not schedulable within 24
-          terms: {projection.unresolved.join(', ')}. Check current outcomes,
-          unit limits, offerings, and corequisite constraints.
-        </Notice>
-      )}
       <Notice>
-        Automatic roadmap estimate:{' '}
-        <strong>
-          {projection.graduation === null
-            ? 'Unresolved'
-            : projection.graduation === -1
-              ? summary(draft).remaining === 0
-                ? 'Curriculum complete'
-                : 'After current subjects pass'
-              : termLabel(draft.settings, projection.graduation)}
-        </strong>
-        . This is a generated projection; your custom plan below may differ.
+        Expected graduation:{' '}
+        <strong>{graduationLabel(draft, projection.graduation)}</strong>. Valid
+        saved placements are kept; unscheduled subjects fill future terms.{' '}
+        {projection.unresolved.length > 0 && (
+          <span>
+            Unresolved within 24 terms: {projection.unresolved.join(', ')}.
+          </span>
+        )}
       </Notice>
-      <div className="planner-grid">
-        {Array.from({ length: termCount }, (_, term) => {
-          const planned = draft.plan.find((t) => t.term === term)?.codes ?? [];
-          const subjects = planned.map((c) =>
-            draft.curriculum.subjects.find((s) => s.code === c)!,
-          );
-          const units = subjects.reduce((n, s) => n + s.units, 0);
-          return (
-            <section className="panel planned-term" key={term}>
-              <header>
-                <p className="eyebrow">FUTURE TERM {term + 1}</p>
-                <h2>{termLabel(draft.settings, term)}</h2>
-                <p
-                  className={
-                    units > draft.settings.maxUnits ? 'failed-text' : 'muted'
-                  }
-                >
-                  {units} / {draft.settings.maxUnits} units
-                </p>
-              </header>
-              <div className="stack">
-                {subjects.map((s) => (
-                  <div className="planned-subject" key={s.code}>
-                    <div>
-                      <strong>{s.code}</strong>
-                      <p>{s.name}</p>
-                      <span className="muted">{s.units} units</span>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={
-                        'Remove ' + s.code + ' from term ' + (term + 1)
-                      }
-                      onClick={() => remove(term, s.code)}
-                    >
-                      <Trash2 size={16} />
-                    </Button>
+      <div className="planning-layout">
+        <div className="planner-timeline">
+          {Array.from({ length: termCount }, (_, term) => {
+            const planned =
+              draft.plan.find((t) => t.term === term)?.codes ?? [];
+            const termEvaluation = evaluation.terms.find(
+              (t) => t.term === term,
+            );
+            const progress =
+              termEvaluation ??
+              evaluatePlan(draft, [
+                ...draft.plan.filter((t) => t.term < term),
+                { term, codes: [] },
+              ]).terms.at(-1)!;
+            return (
+              <section
+                className={
+                  'panel planned-term' +
+                  (activeTerm === term ? ' active-term' : '')
+                }
+                key={term}
+              >
+                <header className="section-heading">
+                  <div>
+                    <p className="eyebrow">FUTURE TERM {term + 1}</p>
+                    <h2>{termLabel(draft.settings, term)}</h2>
                   </div>
-                ))}
-              </div>
-              {!planned.length && (
-                <p className="muted empty-term">No subjects planned yet.</p>
-              )}
-              <Choice
-                label={'Add subject to term ' + (term + 1)}
-                value=""
-                onChange={(c) => {
-                  if (c) add(term, c);
-                }}
-                options={[
-                  { value: '', label: '+ Add a subject' },
-                  ...remaining.map((s) => ({
-                    value: s.code,
-                    label: s.code + ' · ' + s.units + ' units',
-                  })),
-                ]}
-              />
-            </section>
-          );
-        })}
+                  <Button
+                    variant={activeTerm === term ? 'secondary' : 'outline'}
+                    onClick={() => setActiveTerm(term)}
+                    aria-pressed={activeTerm === term}
+                  >
+                    {activeTerm === term
+                      ? 'Selecting subjects'
+                      : 'Add subjects'}
+                  </Button>
+                </header>
+                {planned.length ? (
+                  <div className="stack">
+                    {planned.map((code) => {
+                      const s = draft.curriculum.subjects.find(
+                        (s) => s.code === code,
+                      )!;
+                      const entry = termEvaluation?.entries.find(
+                        (e) => e.code === code,
+                      );
+                      return (
+                        <div className="planned-subject" key={code}>
+                          <div className="planned-subject-info">
+                            <strong>{s.code}</strong>
+                            <p>{s.name}</p>
+                            <span className="muted">{s.units} units</span>{' '}
+                            <Pill
+                              status={entry?.eligible ? 'eligible' : 'blocked'}
+                            />
+                            {entry?.reasons.map((r) => (
+                              <p className="failed-text" key={r}>
+                                {r}
+                              </p>
+                            ))}
+                          </div>
+                          <div className="subject-actions">
+                            <Choice
+                              label={'Move ' + code + ' to term'}
+                              value={String(term)}
+                              onChange={(v) =>
+                                changePlan(
+                                  movePlannedSubject(
+                                    draft.plan,
+                                    code,
+                                    Number(v),
+                                  ),
+                                )
+                              }
+                              options={Array.from(
+                                { length: termCount },
+                                (_, i) => ({
+                                  value: String(i),
+                                  label: 'Term ' + (i + 1),
+                                }),
+                              )}
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={'Remove ' + code}
+                              onClick={() =>
+                                changePlan(
+                                  movePlannedSubject(draft.plan, code, null),
+                                )
+                              }
+                            >
+                              <Trash2 size={16} />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="muted empty-term">
+                    No subjects planned. Select this semester and choose from
+                    the candidate list.
+                  </p>
+                )}
+                <footer className="term-footer">
+                  <div className="row">
+                    <strong>
+                      {termEvaluation?.units ?? 0} / {draft.settings.maxUnits}{' '}
+                      units
+                    </strong>
+                    <span>{progress.progress}% projected completion</span>
+                  </div>
+                  <Progress
+                    value={progress.progress}
+                    aria-label={'Projected progress after term ' + (term + 1)}
+                  />
+                  <small>
+                    {progress.completedUnits} completed units ·{' '}
+                    {progress.remainingUnits} remaining after valid subjects
+                    pass
+                  </small>
+                </footer>
+              </section>
+            );
+          })}
+          {termCount < 24 && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                setActiveTerm(termCount);
+                setTermCount((n) => n + 1);
+              }}
+            >
+              <Plus />
+              Add future semester
+            </Button>
+          )}
+        </div>
+        <aside className="panel candidate-panel">
+          <p className="eyebrow">SUBJECT CANDIDATES</p>
+          <h2>Term {activeTerm + 1}</h2>
+          <p className="muted">{termLabel(draft.settings, activeTerm)}</p>
+          <Input
+            aria-label="Search candidate subjects"
+            placeholder="Search code or title"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <Choice
+            label="Candidate eligibility filter"
+            value={filter}
+            onChange={setFilter}
+            options={[
+              { value: 'all', label: 'All unplanned subjects' },
+              { value: 'eligible', label: 'Eligible for this semester' },
+            ]}
+          />
+          <div className="candidate-list">
+            {candidates.map(({ s, result }) => {
+              const coreqOnly =
+                result.reasons.length > 0 &&
+                result.reasons.every((r) => r.startsWith('Corequisite'));
+              return (
+                <article className="candidate" key={s.code}>
+                  <div className="row">
+                    <strong>{s.code}</strong>
+                    <span>{s.units} units</span>
+                  </div>
+                  <p>{s.name}</p>
+                  <Pill status={result.eligible ? 'eligible' : 'blocked'} />
+                  {result.reasons.map((r) => (
+                    <p className="candidate-reason" key={r}>
+                      {r}
+                    </p>
+                  ))}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy || (!result.eligible && !coreqOnly)}
+                    onClick={() =>
+                      changePlan(
+                        movePlannedSubject(draft.plan, s.code, activeTerm),
+                      )
+                    }
+                  >
+                    {coreqOnly
+                      ? 'Add; corequisite still needed'
+                      : 'Add to semester'}{' '}
+                    <Plus size={14} />
+                  </Button>
+                </article>
+              );
+            })}
+          </div>
+          {!candidates.length && (
+            <Blank title="No matching candidates">
+              Try another filter or term. Completed, current, and already
+              planned subjects are excluded.
+            </Blank>
+          )}
+          <p className="muted">
+            Corequisite drafts show warnings until the partner is added. Invalid
+            plans cannot be saved.
+          </p>
+        </aside>
       </div>
-      {termCount < 24 && (
-        <Button variant="outline" onClick={() => setTermCount((n) => n + 1)}>
-          <Plus />
-          Add future term
-        </Button>
-      )}
-      <p className="muted">
-        Use the subject picker to arrange a custom plan. Conflicts are shown
-        immediately, and an invalid plan cannot be saved. Change a term by
-        removing a subject and adding it to another term.
-      </p>
     </div>
   );
 }
@@ -310,39 +430,68 @@ export function Simulator({ data }: { data: RecordData }) {
   const [action, setAction] = useState<Scenario['action']>('fail'),
     [code, setCode] = useState(''),
     [term, setTerm] = useState(1);
+  const baseline = useMemo(() => projectPath(data), [data]),
+    baselineStats = summary(data);
+  const planned = new Set(
+    (action === 'add'
+      ? data.plan
+      : data.plan.length
+        ? data.plan
+        : baseline.plan
+    ).flatMap((t) => t.codes),
+  );
   const subjects = data.curriculum.subjects.filter((s) =>
     action === 'pass'
       ? statusOf(data.statuses, s.code) === 'current'
-      : statusOf(data.statuses, s.code) !== 'completed',
+      : action === 'remove'
+        ? planned.has(s.code)
+        : action === 'add'
+          ? !planned.has(s.code) &&
+            !['completed', 'current'].includes(statusOf(data.statuses, s.code))
+          : statusOf(data.statuses, s.code) !== 'completed',
   );
   const chosen = subjects.some((s) => s.code === code)
     ? code
     : (subjects[0]?.code ?? '');
-  const baseline = useMemo(() => forecast(data), [data]);
-  const baselineStats = summary(data);
   const scenario = chosen
     ? simulate(data, { code: chosen, action, term })
     : null;
-  const label = (offset: number | null) =>
-    offset === null
-      ? 'Unresolved'
-      : offset === -1
-        ? 'No future terms needed (assumes current passes)'
-        : termLabel(data.settings, offset);
+  const evaluation = scenario ? evaluatePlan(scenario.data) : null;
   const delay =
     scenario &&
     baseline.graduation !== null &&
     scenario.forecast.graduation !== null
       ? scenario.forecast.graduation - baseline.graduation
       : null;
+  const eligibilityChanges = scenario
+    ? data.curriculum.subjects.filter(
+        (s) =>
+          baselineStats.eligible.some((b) => b.code === s.code) !==
+          scenario.summary.eligible.some((b) => b.code === s.code),
+      )
+    : [];
   return (
     <div className="stack">
-      <Notice>
-        <FlaskConical size={18} />
-        Simulation sandbox. Changes here never save to your academic record or
-        semester plan. Comparisons use the automatic roadmap and your saved
-        planning assumptions.
-      </Notice>
+      <div className="simulation-banner">
+        <FlaskConical />
+        <div>
+          <strong>Simulation Mode</strong>
+          <p>
+            Your real academic record and saved plan stay unchanged. Explore one
+            change at a time.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => {
+            setAction('fail');
+            setCode('');
+            setTerm(1);
+          }}
+        >
+          Reset scenario
+        </Button>
+      </div>
       <section className="panel simulator-controls">
         <div>
           <p className="field-label">What if I…</p>
@@ -352,9 +501,11 @@ export function Simulator({ data }: { data: RecordData }) {
             onChange={(v) => setAction(v as Scenario['action'])}
             options={[
               { value: 'fail', label: 'Fail a subject' },
-              { value: 'delay', label: 'Delay a subject until a future term' },
-              { value: 'move', label: 'Move a subject to an exact term' },
-              { value: 'pass', label: 'Pass a currently taken subject' },
+              { value: 'delay', label: 'Delay a subject' },
+              { value: 'move', label: 'Move a subject to a term' },
+              { value: 'pass', label: 'Pass a current subject' },
+              { value: 'add', label: 'Add an unplanned subject' },
+              { value: 'remove', label: 'Remove a planned subject' },
             ]}
           />
         </div>
@@ -370,9 +521,9 @@ export function Simulator({ data }: { data: RecordData }) {
             }))}
           />
         </div>
-        {(action === 'delay' || action === 'move') && (
+        {['delay', 'move', 'add'].includes(action) && (
           <div>
-            <p className="field-label">Future term</p>
+            <p className="field-label">Target semester</p>
             <Choice
               label="Scenario target term"
               value={String(term)}
@@ -385,134 +536,161 @@ export function Simulator({ data }: { data: RecordData }) {
           </div>
         )}
       </section>
+      {action === 'remove' && (
+        <Notice>
+          Removing a required subject postpones it until a later feasible
+          offering; it does not remove its units from your degree requirements.
+        </Notice>
+      )}
       {!scenario ? (
         <Blank title="No subjects available for this scenario">
-          Mark currently taken subjects to simulate passing them.
+          Passing requires a current subject. Adding requires an unplanned
+          subject; removing requires a subject in the current path.
         </Blank>
       ) : (
         <>
           <div className="comparison-grid">
-            <section className="panel">
-              <p className="eyebrow">SAVED RECORD PROJECTION</p>
-              <h2>{label(baseline.graduation)}</h2>
-              <div className="comparison-stats">
-                <span>
-                  <strong>{baselineStats.eligible.length}</strong>eligible now
-                </span>
-                <span>
-                  <strong>{baselineStats.blocked.length}</strong>blocked now
-                </span>
-                <span>
-                  <strong>{baselineStats.completedUnits}</strong>units complete
-                </span>
-              </div>
-            </section>
-            <div className="comparison-arrow">
-              <ArrowRight />
-            </div>
-            <section className="panel scenario-result">
-              <p className="eyebrow">SIMULATED PROJECTION</p>
-              <h2>{label(scenario.forecast.graduation)}</h2>
-              <div className="comparison-stats">
-                <span>
-                  <strong>{scenario.summary.eligible.length}</strong>eligible
-                  now
-                </span>
-                <span>
-                  <strong>{scenario.summary.blocked.length}</strong>blocked now
-                </span>
-                <span>
-                  <strong>{scenario.summary.completedUnits}</strong>units
-                  complete
-                </span>
-              </div>
-              <p className="muted">
-                {delay === null
-                  ? 'Estimate unavailable until unresolved constraints are corrected.'
-                  : delay === 0
-                    ? 'No projected graduation shift.'
-                    : Math.abs(delay) +
-                      ' term(s) ' +
-                      (delay > 0 ? 'later' : 'earlier') +
-                      ' than the baseline.'}
-              </p>
-            </section>
+            {[
+              {
+                title: 'CURRENT PATH',
+                record: data,
+                stats: baselineStats,
+                result: baseline,
+              },
+              {
+                title: 'SIMULATED PATH',
+                record: scenario.data,
+                stats: scenario.summary,
+                result: scenario.forecast,
+              },
+            ].map((view, i) => (
+              <section
+                className={'panel ' + (i ? 'scenario-result' : '')}
+                key={view.title}
+              >
+                <p className="eyebrow">{view.title}</p>
+                <span className="muted">Expected graduation</span>
+                <h2>{graduationLabel(view.record, view.result.graduation)}</h2>
+                <div className="comparison-stats">
+                  <span>
+                    <strong>{view.stats.eligible.length}</strong>eligible now
+                  </span>
+                  <span>
+                    <strong>{view.stats.blocked.length}</strong>blocked now
+                  </span>
+                  <span>
+                    <strong>{view.stats.remainingUnits}</strong>remaining units
+                  </span>
+                </div>
+                {i === 1 && (
+                  <p className="muted">
+                    {delay === null
+                      ? 'Estimate unavailable while scheduling constraints remain unresolved.'
+                      : delay === 0
+                        ? 'No projected graduation shift.'
+                        : Math.abs(delay) +
+                          ' semester(s) ' +
+                          (delay > 0 ? 'later' : 'earlier') +
+                          ' than the current path.'}
+                  </p>
+                )}
+              </section>
+            ))}
           </div>
           {scenario.forecast.unresolved.length > 0 && (
             <Notice tone="warning">
-              Unresolved: {scenario.forecast.unresolved.join(', ')}. An exact
-              move may violate prerequisites, offerings, or the unit limit. Try
-              another term.
+              Unresolved: {scenario.forecast.unresolved.join(', ')}. Check
+              prerequisites, offerings, current outcomes, the unit limit, or the
+              selected target semester.
             </Notice>
           )}
           <div className="two-columns">
             <section className="panel">
-              <h2>Affected prerequisite chain</h2>
+              <h2>Affected prerequisite relationships</h2>
               <p className="muted">
-                Subjects downstream of {chosen}; their dates may shift even if
-                eligibility today stays the same.
+                The changed subject and its downstream chain are rescheduled.
+                Other saved placements are retained.
               </p>
-              <div className="chain">
-                <strong>{chosen}</strong>
-                {scenario.affected.map((c) => (
-                  <span key={c}>{c}</span>
-                ))}
+              <div className="edge-list">
+                {prerequisiteEdges(data.curriculum.subjects, chosen).map(
+                  (e) => (
+                    <p key={e.from + e.to}>
+                      <strong>{e.from}</strong>
+                      <ArrowRight size={14} />
+                      {subjectLabel(data.curriculum.subjects, e.to)}
+                    </p>
+                  ),
+                )}
               </div>
-              {!scenario.affected.length && <p>No dependent subjects.</p>}
+              {!scenario.affected.length && (
+                <p className="muted">No dependent subjects.</p>
+              )}
             </section>
             <section className="panel">
               <h2>Eligibility changes</h2>
-              {data.curriculum.subjects
-                .filter(
-                  (s) =>
-                    baselineStats.eligible.some((b) => b.code === s.code) !==
-                    scenario.summary.eligible.some((b) => b.code === s.code),
-                )
-                .map((s) => (
-                  <div className="record-line" key={s.code}>
-                    <strong>{s.code}</strong>
-                    <span>
-                      {scenario.summary.eligible.some((e) => e.code === s.code)
-                        ? 'Newly eligible'
-                        : 'No longer eligible'}
-                    </span>
-                  </div>
-                ))}
+              {eligibilityChanges.map((s) => (
+                <div className="record-line" key={s.code}>
+                  <strong>{s.code}</strong>
+                  <span>
+                    {scenario.summary.eligible.some((e) => e.code === s.code)
+                      ? 'Newly eligible'
+                      : 'No longer eligible'}
+                  </span>
+                </div>
+              ))}
+              {!eligibilityChanges.length && (
+                <p className="muted">
+                  No change to eligibility today. Future semester placements may
+                  still change.
+                </p>
+              )}
               <p className="muted">
-                Delay and move scenarios change future scheduling. They do not
-                count the subject as completed today. A failed subject that was
-                already not taken may have the same retake schedule.
+                Scheduling a subject does not count it as passed today.
               </p>
             </section>
           </div>
           <section className="panel">
-            <h2>Recalculated future semesters</h2>
+            <div className="section-heading">
+              <h2>Recalculated semester plan</h2>
+              <span className="muted">Projected after each valid semester</span>
+            </div>
             <div className="simulation-terms">
-              {scenario.forecast.plan.map((t) => (
-                <div className="simulation-term" key={t.term}>
-                  <p className="eyebrow">TERM {t.term + 1}</p>
-                  <strong>{termLabel(data.settings, t.term)}</strong>
-                  <p>
-                    {t.codes.join(', ') || 'No available subjects this term'}
-                  </p>
-                  <span className="muted">
-                    {t.codes.reduce(
-                      (n, c) =>
-                        n +
-                        (data.curriculum.subjects.find((s) => s.code === c)
-                          ?.units ?? 0),
-                      0,
-                    )}{' '}
-                    units
-                  </span>
-                </div>
-              ))}
+              {scenario.forecast.plan.map((t) => {
+                const projected = evaluation?.terms.find(
+                  (e) => e.term === t.term,
+                );
+                return (
+                  <div className="simulation-term" key={t.term}>
+                    <p className="eyebrow">TERM {t.term + 1}</p>
+                    <strong>{termLabel(data.settings, t.term)}</strong>
+                    <p>
+                      {t.codes.join(', ') ||
+                        'No available subjects this semester'}
+                    </p>
+                    <div className="record-line">
+                      <span>{projected?.units ?? 0} units</span>
+                      <span>{projected?.remainingUnits ?? 0} remaining</span>
+                    </div>
+                    <Progress
+                      value={projected?.progress ?? 0}
+                      aria-label={
+                        'Simulated completion after term ' + (t.term + 1)
+                      }
+                    />
+                  </div>
+                );
+              })}
             </div>
             {!scenario.forecast.plan.length && (
-              <p className="muted">
-                No future subjects could be scheduled, or the curriculum is
-                complete.
-              </p>
+              <Blank
+                title={
+                  scenario.forecast.unresolved.length
+                    ? 'No feasible future subjects'
+                    : 'No future semesters needed'
+                }
+              >
+                Review the comparison and any unresolved subjects above.
+              </Blank>
             )}
           </section>
         </>

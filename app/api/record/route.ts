@@ -1,6 +1,7 @@
 import { getChatGPTUser } from '@/app/chatgpt-auth';
 import { getBinding } from '@/db';
 import { validateRecord } from '@/lib/import';
+import { planWarnings, type RecordData } from '@/lib/academic';
 
 export const dynamic = 'force-dynamic';
 const json = (value: unknown, status = 200) =>
@@ -59,6 +60,32 @@ export async function PUT(request: Request) {
   // Conflicting academic plans may be retained when a real grade changes. The UI
   // shows planWarnings and withholds a valid-plan label until they are corrected.
   try {
+    const existing = await getBinding()
+      .prepare(
+        'SELECT document, revision FROM student_records WHERE user_id = ?',
+      )
+      .bind(user.userId)
+      .first<{ document: string; revision: number }>();
+    if ((existing?.revision ?? 0) !== revision)
+      return json(
+        { error: 'This record changed in another tab. Reload before saving.' },
+        409,
+      );
+    const previous = existing
+      ? (JSON.parse(existing.document) as RecordData)
+      : null;
+    const planChanged =
+      !previous ||
+      JSON.stringify(previous.plan) !== JSON.stringify(data.plan) ||
+      JSON.stringify(previous.settings) !== JSON.stringify(data.settings);
+    const conflicts = planWarnings(data);
+    if (planChanged && conflicts.length)
+      return json(
+        {
+          error: 'Resolve plan conflicts before saving: ' + conflicts.join(' '),
+        },
+        400,
+      );
     const result = await getBinding()
       .prepare(
         `INSERT INTO student_records (user_id, display_name, document, revision, updated_at) VALUES (?, ?, ?, 1, ?) ON CONFLICT(user_id) DO UPDATE SET document = excluded.document, display_name = excluded.display_name, revision = student_records.revision + 1, updated_at = excluded.updated_at WHERE student_records.revision = ? RETURNING revision`,
