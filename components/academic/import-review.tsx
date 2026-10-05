@@ -312,7 +312,7 @@ export function ReviewView({
             upload a clearer copy.
           </Notice>
         )}
-        <div className="panel review-controls">
+        <div className="review-controls">
           <label htmlFor="curriculum-name">
             Curriculum name
             <Input
@@ -477,11 +477,11 @@ export function ReviewView({
             semester.
           </p>
         </div>
-        <details className="panel extracted-text">
+        <details className="section-block extracted-text">
           <summary>Extracted text</summary>
           <pre>{draft.text || 'No readable text found.'}</pre>
         </details>
-        <div className="panel confirmation-bar">
+        <div className="confirmation-bar">
           <label className="checkbox-label" htmlFor="review-checked">
             <Checkbox
               id="review-checked"
@@ -669,7 +669,7 @@ export function ProfileSettings({
     }
   }
   return (
-    <section className="panel profile-settings">
+    <section className="section-block profile-settings">
       <h2>Student profile</h2>
       <p className="muted">Your name and academic program.</p>
       {error && <Notice tone="warning">{error}</Notice>}

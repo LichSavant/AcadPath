@@ -94,7 +94,7 @@ export function Planner({
     );
   return (
     <div className="stack">
-      <section className="panel settings-panel">
+      <section className="section-block settings-panel">
         <div className="section-heading">
           <h2>Planning assumptions</h2>
           <CalendarDays size={20} />
@@ -167,9 +167,6 @@ export function Planner({
           />
           Assume current subjects pass before this future semester
         </label>
-        <p className="muted">
-          Prerequisites come first; corequisites can be taken together.
-        </p>
       </section>
       <div className="action-bar">
         <div>
@@ -341,7 +338,7 @@ export function Planner({
           )}
         </div>
         <aside className="panel candidate-panel">
-          <p className="eyebrow">SUBJECT CANDIDATES</p>
+          <p className="eyebrow">ADD SUBJECTS</p>
           <h2>Term {activeTerm + 1}</h2>
           <p className="muted">{termLabel(draft.settings, activeTerm)}</p>
           <Input
@@ -356,7 +353,7 @@ export function Planner({
             onChange={setFilter}
             options={[
               { value: 'all', label: 'All unplanned subjects' },
-              { value: 'eligible', label: 'Eligible for this semester' },
+              { value: 'eligible', label: 'Can take this semester' },
             ]}
           />
           <div className="candidate-list">
@@ -468,7 +465,7 @@ export function Simulator({ data }: { data: RecordData }) {
           Reset scenario
         </Button>
       </div>
-      <section className="panel simulator-controls">
+      <section className="simulator-controls">
         <div>
           <p className="field-label">What if I…</p>
           <Choice
@@ -548,7 +545,7 @@ export function Simulator({ data }: { data: RecordData }) {
                 <h2>{graduationLabel(view.record, view.result.graduation)}</h2>
                 <div className="comparison-stats">
                   <span>
-                    <strong>{view.stats.eligible.length}</strong>eligible now
+                    <strong>{view.stats.eligible.length}</strong>can take next
                   </span>
                   <span>
                     <strong>{view.stats.blocked.length}</strong>blocked now
@@ -579,9 +576,8 @@ export function Simulator({ data }: { data: RecordData }) {
             </Notice>
           )}
           <div className="two-columns">
-            <section className="panel">
+            <section className="section-block">
               <h2>Affected Subjects</h2>
-              <p className="muted">Dependent subjects are rescheduled.</p>
               <div className="edge-list">
                 {prerequisiteEdges(data.curriculum.subjects, chosen).map(
                   (e) => (
@@ -597,7 +593,7 @@ export function Simulator({ data }: { data: RecordData }) {
                 <p className="muted">No dependent subjects.</p>
               )}
             </section>
-            <section className="panel">
+            <section className="section-block">
               <h2>Eligibility changes</h2>
               {eligibilityChanges.map((s) => (
                 <div className="record-line" key={s.code}>
@@ -612,10 +608,9 @@ export function Simulator({ data }: { data: RecordData }) {
               {!eligibilityChanges.length && (
                 <p className="muted">No eligibility changes today.</p>
               )}
-              <p className="muted"></p>
             </section>
           </div>
-          <section className="panel">
+          <section className="section-block">
             <div className="section-heading">
               <h2>Simulated Plan</h2>
             </div>

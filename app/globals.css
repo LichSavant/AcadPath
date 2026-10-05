@@ -99,7 +99,6 @@ body {
 
 body {
   margin: 0;
-  min-width: 1024px;
   font-size: 14px;
   line-height: 1.5;
 }
@@ -175,10 +174,6 @@ small {
   height: 24px;
 }
 .desktop-sidebar {
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  flex: 0 0 240px;
   border-right: 1px solid var(--border);
 }
 .nav-brand {
@@ -217,27 +212,26 @@ small {
 .nav-footer a {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   padding: 10px 12px;
   font-size: 14px;
   color: var(--muted-foreground);
 }
 .workspace {
   flex: 1;
-  width: calc(100% - 240px);
+  width: 100%;
   min-width: 0;
 }
 .topbar {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: var(--space-6);
   min-height: 60px;
   padding: 16px 32px;
   border-bottom: 1px solid var(--border);
   background: white;
 }
 .topbar-context {
-  margin-left: auto;
   min-width: 0;
   color: var(--muted-foreground);
   font-size: 13px;
@@ -249,7 +243,7 @@ small {
   flex-shrink: 0;
 }
 .page-content {
-  max-width: 1280px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 28px 32px 32px;
 }
@@ -257,7 +251,7 @@ small {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
+  gap: var(--space-6);
   margin-bottom: 24px;
 }
 .page-title p {
@@ -282,7 +276,7 @@ small {
 .page-footer {
   display: flex;
   justify-content: space-between;
-  gap: 20px;
+  gap: var(--space-6);
   color: #748078;
   font-size: 12px;
   border-top: 1px solid var(--border);
@@ -290,24 +284,23 @@ small {
   margin-top: 28px;
 }
 .panel {
-  padding: 22px;
+  padding: var(--space-6);
   border: 1px solid var(--border);
   background: white;
   border-radius: 8px;
-  box-shadow: 0 2px 5px #183c2505;
   min-width: 0;
 }
 .stack {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: var(--space-6);
   min-width: 0;
 }
 .row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
   min-width: 0;
 }
 .section-heading,
@@ -315,7 +308,7 @@ small {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-4);
   min-width: 0;
 }
 .section-heading {
@@ -390,57 +383,84 @@ small {
 .setup-card button {
   margin-top: 4px;
 }
-.dashboard-summary {
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+}
+.section-block {
+  min-width: 0;
+}
+.academic-progress {
   display: grid;
-  grid-template-columns: minmax(250px, 1.7fr) minmax(140px, 1fr) minmax(
-      140px,
-      1fr
-    ) minmax(210px, 1.35fr);
-  gap: 16px;
-  align-items: stretch;
+  gap: var(--space-6);
 }
 .progress-summary {
   display: grid;
-  gap: 12px;
+  gap: var(--space-3);
 }
 .progress-summary strong {
-  font-size: 28px;
+  font-size: 32px;
   line-height: 1.2;
+  color: var(--primary);
 }
-.progress-summary strong span {
+.progress-summary strong span,
+.progress-metrics dd span {
   font-size: 14px;
   font-weight: 400;
   color: var(--muted-foreground);
 }
-.progress-summary small {
+.progress-percentage {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--primary);
+}
+.progress-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-6);
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-4);
+}
+.progress-metrics dt {
   color: var(--muted-foreground);
+  font-size: 13px;
+  margin-bottom: var(--space-2);
 }
-.metric {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
+.progress-metrics dd {
+  font-size: 20px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
-.metric h3 {
-  font-size: 14px;
+.next-subjects {
+  border-top: 3px solid var(--primary);
+}
+.blocker-targets {
+  display: grid;
+  gap: var(--space-1);
   color: var(--muted-foreground);
-  font-weight: 500;
+  font-size: 13px;
 }
-.metric > strong {
-  font-size: 28px;
-  line-height: 1.3;
+.unlock-list {
+  display: grid;
+  gap: var(--space-3);
 }
-.metric > strong.graduation-value {
-  font-size: 17px;
+.empty-state {
+  padding: var(--space-6) 0;
+  border: 0;
+}
+.mobile-nav-trigger {
+  display: none;
 }
 .dashboard-grid,
 .two-columns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
+  gap: var(--space-6);
   align-items: start;
-}
-.dashboard-grid > .panel {
-  height: 100%;
 }
 .subject-link {
   display: grid;
@@ -466,7 +486,7 @@ small {
   width: 100%;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--space-4);
   text-align: left;
   border-bottom: 1px solid var(--border);
   padding: 12px 0;
@@ -494,10 +514,6 @@ small {
 }
 .blocker .muted {
   margin: 5px 0;
-}
-.blocker-chain {
-  font-size: 12px;
-  color: #718078;
 }
 .term-total {
   font-size: 13px;
@@ -587,7 +603,7 @@ label > input,
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 16px;
+  gap: var(--space-4);
 }
 .upload-zone {
   width: 100%;
@@ -634,7 +650,7 @@ label > input,
 }
 .extraction-progress {
   display: grid;
-  gap: 12px;
+  gap: var(--space-3);
   width: 100%;
 }
 .extraction-progress button {
@@ -644,7 +660,7 @@ label > input,
   display: flex;
   align-items: end;
   justify-content: space-between;
-  gap: 20px;
+  gap: var(--space-6);
 }
 .review-controls label {
   flex: 1;
@@ -658,13 +674,13 @@ label > input,
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 20px;
+  gap: var(--space-6);
   margin-bottom: 20px;
 }
 .record-toolbar {
   display: grid;
   grid-template-columns: minmax(240px, 1fr) 220px auto;
-  gap: 16px;
+  gap: var(--space-4);
   align-items: center;
 }
 .table-panel {
@@ -787,13 +803,13 @@ label > input,
 .confirmation-bar {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: var(--space-6);
   justify-content: space-between;
 }
 .profile-settings {
   max-width: 680px;
   display: grid;
-  gap: 20px;
+  gap: var(--space-6);
 }
 .profile-settings button {
   justify-self: start;
@@ -801,23 +817,28 @@ label > input,
 .map-toolbar {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) 180px minmax(200px, 1fr);
-  gap: 16px;
+  gap: var(--space-4);
+}
+.legend .pill {
+  background: transparent;
+  border: 0;
+  padding: 0;
 }
 .legend {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   flex-wrap: wrap;
 }
 .map-board {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: var(--space-6);
 }
 .year-heading {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--space-4);
   align-items: center;
   border-bottom: 1px solid #c9d7cc;
   padding-bottom: 12px;
@@ -834,7 +855,7 @@ label > input,
 .year-semesters {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
+  gap: var(--space-6);
 }
 .term-column {
   min-width: 0;
@@ -843,7 +864,7 @@ label > input,
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   margin-bottom: 12px;
 }
 .term-column header span {
@@ -853,7 +874,7 @@ label > input,
 .map-subjects {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: var(--space-4);
 }
 .subject-card {
   display: flex;
@@ -925,8 +946,9 @@ label > input,
 }
 .settings-grid {
   display: grid;
+  align-items: end;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 20px;
+  gap: var(--space-6);
   margin-bottom: 16px;
 }
 .settings-panel .checkbox-label {
@@ -944,17 +966,17 @@ label > input,
 .planning-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.65fr) minmax(280px, 1fr);
-  gap: 24px;
+  gap: var(--space-6);
   align-items: start;
 }
 .planner-timeline {
   display: grid;
-  gap: 20px;
+  gap: var(--space-6);
 }
 .planned-term {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-4);
 }
 .planned-term header {
   margin-bottom: 0;
@@ -974,12 +996,12 @@ label > input,
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
   border-bottom: 1px solid var(--border);
   padding-bottom: 12px;
 }
 .planned-term .stack {
-  gap: 12px;
+  gap: var(--space-3);
 }
 .planned-subject-info {
   min-width: 0;
@@ -1021,11 +1043,11 @@ label > input,
 }
 .candidate-panel {
   display: grid;
-  gap: 12px;
+  gap: var(--space-3);
 }
 .candidate-list {
   display: grid;
-  gap: 12px;
+  gap: var(--space-3);
   max-height: 600px;
   overflow: auto;
 }
@@ -1072,12 +1094,12 @@ label > input,
       200px,
       1.1fr
     );
-  gap: 20px;
+  gap: var(--space-6);
 }
 .comparison-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
+  gap: var(--space-6);
 }
 .comparison-grid h2 {
   font-size: 20px;
@@ -1107,7 +1129,7 @@ label > input,
 .simulation-terms {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  gap: var(--space-4);
 }
 .simulation-term {
   padding: 16px;
@@ -1124,15 +1146,15 @@ label > input,
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
   border-bottom: 1px solid var(--border);
   padding: 12px 0;
   margin-bottom: 10px;
   font-size: 13px;
 }
 .subject-sheet {
-  width: 420px !important;
-  max-width: 420px !important;
+  width: min(420px, 100vw) !important;
+  max-width: 100vw !important;
   overflow-y: auto;
 }
 .subject-sheet [data-slot='sheet-header'] {
@@ -1146,7 +1168,7 @@ label > input,
   padding: 8px 24px 28px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
   font-size: 14px;
 }
 .sheet-body h3 {
@@ -1181,7 +1203,7 @@ label > input,
   flex-direction: column;
   justify-content: center;
   align-items: flex-start;
-  gap: 20px;
+  gap: var(--space-6);
   padding: 56px 72px;
 }
 .login-card .brand {
@@ -1197,7 +1219,7 @@ label > input,
 .primary-link {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: var(--space-6);
   background: var(--primary);
   color: white;
   border-radius: 6px;
@@ -1218,7 +1240,7 @@ label > input,
 .path-line {
   display: grid;
   grid-template-columns: 32px 1fr;
-  gap: 16px;
+  gap: var(--space-4);
   align-items: center;
 }
 .path-line span {
@@ -1227,13 +1249,13 @@ label > input,
 }
 .login-features {
   display: grid;
-  gap: 12px;
+  gap: var(--space-3);
   margin-top: 16px;
   color: var(--muted-foreground);
 }
 .login-features span {
   display: flex;
-  gap: 12px;
+  gap: var(--space-3);
   align-items: center;
 }
 .login-features svg {
@@ -1246,4 +1268,127 @@ label > input,
   gap: 10px;
   color: var(--muted-foreground);
   font-size: 13px;
+}
+
+/* Reflow shared layouts; wide review tables scroll inside their container. */
+@media (max-width: 1100px) {
+  .comparison-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .map-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .map-toolbar > input {
+    grid-column: 1 / -1;
+  }
+  .planning-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .candidate-list {
+    max-height: 400px;
+  }
+  .map-subjects {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .simulator-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .simulation-terms {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .record-toolbar {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+@media (max-width: 767px) {
+  .mobile-nav-trigger {
+    display: inline-flex;
+  }
+  .topbar {
+    padding: var(--space-3) var(--space-4);
+    gap: var(--space-3);
+  }
+  .page-content {
+    padding: var(--space-6) var(--space-4);
+  }
+  h1 {
+    font-size: 26px;
+  }
+  .panel {
+    padding: var(--space-4);
+  }
+  .table-panel {
+    padding: 0;
+  }
+  .dashboard-grid,
+  .two-columns,
+  .comparison-grid,
+  .year-semesters,
+  .settings-grid,
+  .simulator-controls,
+  .login {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .map-subjects {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .section-heading,
+  .action-bar,
+  .page-title,
+  .year-heading,
+  .confirmation-bar,
+  .curriculum-actions,
+  .review-controls,
+  .simulation-banner,
+  .file-selection {
+    flex-wrap: wrap;
+  }
+  .review-controls label {
+    flex-basis: 100%;
+    max-width: none;
+  }
+  .review-controls > span {
+    max-width: 100%;
+  }
+  .page-footer {
+    flex-wrap: wrap;
+  }
+  .login-card,
+  .login-note {
+    padding: var(--space-8);
+  }
+}
+@media (max-width: 480px) {
+  .progress-metrics,
+  .map-toolbar,
+  .record-toolbar,
+  .simulation-terms,
+  .map-subjects {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .progress-metrics {
+    gap: var(--space-4);
+  }
+  .progress-summary strong {
+    font-size: 26px;
+  }
+  .progress-percentage {
+    font-size: 20px;
+  }
+  .planned-subject {
+    flex-wrap: wrap;
+  }
+  .subject-actions {
+    width: 100%;
+  }
+  .comparison-stats {
+    flex-wrap: wrap;
+    gap: var(--space-4);
+  }
+  .upload-zone {
+    padding: var(--space-6) var(--space-4);
+  }
+  .simulation-banner button {
+    margin-left: 0;
+  }
 }

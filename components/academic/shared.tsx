@@ -24,7 +24,7 @@ export const statusLabels: Record<string, string> = {
   current: 'Currently taking',
   remaining: 'Remaining',
   failed: 'Failed',
-  eligible: 'Eligible',
+  eligible: 'Can take next',
   blocked: 'Blocked',
 };
 export const filterOptions = [
@@ -83,7 +83,7 @@ export function Blank({
   children?: ReactNode;
 }) {
   return (
-    <Empty className="panel">
+    <Empty className="empty-state">
       <EmptyHeader>
         <EmptyTitle>{title}</EmptyTitle>
         <EmptyDescription>{children}</EmptyDescription>

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import {
   SidebarProvider,
+  SidebarTrigger,
   Sidebar,
   SidebarHeader,
   SidebarContent,
@@ -49,9 +50,9 @@ import { Pill, Notice, Blank } from './shared';
 const pages = [
   ['dashboard', 'Dashboard', LayoutDashboard],
   ['review', 'Curriculum', ListChecks],
-  ['map', 'Curriculum Map', GitBranch],
+  ['map', 'Course Map', GitBranch],
   ['planner', 'Semester Planner', CalendarDays],
-  ['simulator', 'What-If Simulator', FlaskConical],
+  ['simulator', 'What If', FlaskConical],
   ['settings', 'Settings', Settings],
 ] as const;
 type Page = (typeof pages)[number][0] | 'upload';
@@ -140,7 +141,7 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
       setData(result.data);
       setRevision(result.revision);
       setPending(null);
-      setMessage('Your academic record has been saved.');
+      setMessage('Saved.');
       return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save.');
@@ -149,6 +150,11 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
       setBusy(false);
     }
   }
+  useEffect(() => {
+    if (!message) return;
+    const timer = window.setTimeout(() => setMessage(''), 4000);
+    return () => window.clearTimeout(timer);
+  }, [message]);
   const stage = (draft: ProspectusDraft, file: File) => {
     setPending({ ...draft, url: URL.createObjectURL(file) });
     navigate('review');
@@ -164,6 +170,10 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
     () => (data && isSetupComplete(data) ? summary(data) : null),
     [data],
   );
+  const unlocks =
+    data?.curriculum.subjects.filter(
+      (s) => selected && s.prerequisites.includes(selected.code),
+    ) ?? [];
   const studentName = data?.profile?.name ?? name;
   const pageLabel =
     page === 'upload'
@@ -221,7 +231,7 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
   }, [data]);
   return (
     <>
-      <Sidebar collapsible="none" className="desktop-sidebar">
+      <Sidebar collapsible="offcanvas" className="desktop-sidebar">
         <SidebarHeader className="nav-brand">
           <div className="brand">
             <GraduationCap />
@@ -283,18 +293,14 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
       </Sidebar>
       <main className="workspace">
         <header className="topbar">
-          <div className="row">
-            <strong>{pageLabel}</strong>
-          </div>
+          <SidebarTrigger className="mobile-nav-trigger" />
           <span className="topbar-context">
             {data?.curriculum.program ?? 'USC Cebu · Student workspace'}
             {data?.curriculum.curriculumYear
               ? ` · Curriculum ${data.curriculum.curriculumYear}`
               : ''}
           </span>
-          <span className="save-state">
-            {busy ? 'Saving...' : ready ? 'Saved record' : 'Curriculum setup'}
-          </span>
+          {busy && <output className="save-state">Saving...</output>}
         </header>
         <div className="page-content">
           <div className="page-title">
@@ -306,13 +312,6 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
                     : 'Welcome to AcadPath'
                   : pageLabel}
               </h1>
-              {page === 'dashboard' && (
-                <p className="muted">
-                  {ready
-                    ? 'Your academic pathway.'
-                    : 'Plan your USC academic journey.'}
-                </p>
-              )}
             </div>
             {ready && data && (
               <span className={'source-badge ' + data.curriculum.source}>
@@ -334,10 +333,13 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
           )}
           {message && <Notice tone="success">{message}</Notice>}
           {loading ? (
-            <div className="stats-grid">
-              {[1, 2, 3, 4].map((n) => (
-                <Skeleton key={n} className="h-32" />
-              ))}
+            <div
+              className="stack"
+              aria-busy="true"
+              aria-label="Loading academic record"
+            >
+              <Skeleton className="h-56" />
+              <Skeleton className="h-64" />
             </div>
           ) : error && !data ? (
             <Blank title="Your workspace is unavailable">
@@ -454,28 +456,38 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
               </SheetHeader>
               <div className="sheet-body">
                 <Pill status={academicState(selected, data.statuses)} />
-                <h3>Eligibility right now</h3>
+                <h3>Can I take this?</h3>
                 <p>
                   {academicState(selected, data.statuses) === 'completed'
                     ? 'This subject is completed.'
                     : academicState(selected, data.statuses) === 'current'
-                      ? 'Currently taking. Pass to unlock dependent subjects.'
+                      ? unlocks.length
+                        ? `Pass to unlock ${unlocks.length} ${unlocks.length === 1 ? 'course' : 'courses'}.`
+                        : 'Currently taking.'
                       : eligibility(selected, completedCodes(data.statuses))
                             .eligible
-                        ? 'Requirements satisfied. Check semester offerings.'
-                        : 'Missing requirements below. Corequisites can be taken together.'}
+                        ? 'Yes. Check semester offerings.'
+                        : 'Complete the requirements below. Corequisites may be taken together.'}
                 </p>
-                <h3>Direct prerequisites</h3>
+                <h3>Prerequisites</h3>
                 <RequirementList codes={selected.prerequisites} data={data} />
                 <h3>Corequisites</h3>
                 <RequirementList codes={selected.corequisites} data={data} />
                 <h3>Unlocks</h3>
-                <p>
-                  {data.curriculum.subjects
-                    .filter((s) => s.prerequisites.includes(selected.code))
-                    .map((s) => s.code)
-                    .join(', ') || 'No direct dependents.'}
-                </p>
+                <ul className="unlock-list">
+                  {unlocks.map((s) => (
+                    <li key={s.code}>
+                      <button
+                        className="subject-link"
+                        onClick={() => setSelected(s)}
+                      >
+                        <strong>{s.code}</strong>
+                        <span>{s.name}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                {!unlocks.length && <p className="muted">No courses.</p>}
                 <h3>Offered in</h3>
                 <p>
                   {selected.offered.map((s) => 'Semester ' + s).join(' and ')}
@@ -505,6 +517,6 @@ function RequirementList({
       ))}
     </ul>
   ) : (
-    <p className="muted">None required.</p>
+    <p className="muted">None.</p>
   );
 }

@@ -60,34 +60,38 @@ export function Dashboard({
     .sort((a, b) => a.term - b.term)[0];
   return (
     <div className="stack">
-      <section className="dashboard-summary">
-        <article className="panel progress-summary">
-          <h2>Academic Progress</h2>
-          <strong>
-            {stats.completedUnits} <span>/ {stats.totalUnits} units</span>
-          </strong>
-          <Progress value={stats.progress} aria-label="Academic progress" />
-          <small>{stats.progress}% completed</small>
-        </article>
-        {[
-          { title: 'Eligible Subjects', value: stats.eligible.length },
-          { title: 'Remaining Units', value: stats.remainingUnits },
-          {
-            title: 'Expected Graduation',
-            value: graduationLabel(data, path.graduation),
-          },
-        ].map((item) => (
-          <article className="panel metric" key={item.title}>
-            <h3>{item.title}</h3>
-            <strong
-              className={
-                typeof item.value === 'string' ? 'graduation-value' : ''
-              }
-            >
-              {item.value}
+      <section
+        className="panel academic-progress"
+        aria-labelledby="progress-heading"
+      >
+        <h2 id="progress-heading">Academic Progress</h2>
+        <div className="progress-summary">
+          <div className="row">
+            <strong>
+              {stats.completedUnits} <span>/ {stats.totalUnits} units</span>
             </strong>
-          </article>
-        ))}
+            <span className="progress-percentage">{stats.progress}%</span>
+          </div>
+          <Progress value={stats.progress} aria-label="Academic progress" />
+        </div>
+        <dl className="progress-metrics">
+          <div>
+            <dt>Can Take Next</dt>
+            <dd>
+              {stats.eligible.length} <span>subjects</span>
+            </dd>
+          </div>
+          <div>
+            <dt>Remaining</dt>
+            <dd>
+              {stats.remainingUnits} <span>units</span>
+            </dd>
+          </div>
+          <div>
+            <dt>Est. Graduation</dt>
+            <dd>{graduationLabel(data, path.graduation)}</dd>
+          </div>
+        </dl>
       </section>
       {path.warnings.length > 0 && (
         <Notice tone="warning">
@@ -98,7 +102,84 @@ export function Dashboard({
         </Notice>
       )}
       <div className="dashboard-grid">
-        <section className="panel">
+        <section className="panel next-subjects">
+          <div className="section-heading">
+            <h2>Can Take Next</h2>
+            <Button variant="ghost" onClick={() => navigate('planner')}>
+              Plan <ArrowUpRight />
+            </Button>
+          </div>
+          {stats.eligible.length ? (
+            <div className="eligible-list">
+              {stats.eligible.slice(0, 4).map((s) => (
+                <button
+                  className="list-row"
+                  key={s.code}
+                  onClick={() => select(s)}
+                >
+                  <div>
+                    <strong>{s.code}</strong>
+                    <p>{s.name}</p>
+                  </div>
+                  <span>{s.units} units</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="section-empty">
+              {stats.remaining
+                ? 'No subjects eligible yet.'
+                : 'Curriculum complete.'}
+            </p>
+          )}
+          {stats.eligible.length > 4 && (
+            <Button variant="ghost" onClick={() => navigate('map')}>
+              View all {stats.eligible.length}
+            </Button>
+          )}
+        </section>
+        {blockers.length > 0 && (
+          <section className="section-block">
+            <div className="section-heading">
+              <h2>Blockers</h2>
+              <Button variant="ghost" onClick={() => navigate('map')}>
+                Course Map
+              </Button>
+            </div>
+            {blockers.map(({ s, downstream }) => (
+              <article className="blocker" key={s.code}>
+                <button className="subject-link" onClick={() => select(s)}>
+                  <strong>
+                    {s.code} &middot; {s.name}
+                  </strong>
+                </button>
+                <p className="muted">
+                  {statusOf(data.statuses, s.code) === 'current'
+                    ? 'Current'
+                    : statusOf(data.statuses, s.code) === 'failed'
+                      ? 'Failed'
+                      : 'Remaining'}{' '}
+                  &middot; blocks {downstream.length}{' '}
+                  {downstream.length === 1 ? 'subject' : 'subjects'}
+                </p>
+                <ul className="blocker-targets">
+                  {data.curriculum.subjects
+                    .filter(
+                      (target) =>
+                        target.prerequisites.includes(s.code) &&
+                        statusOf(data.statuses, target.code) !== 'completed',
+                    )
+                    .map((target) => (
+                      <li key={target.code}>&rarr; {target.name}</li>
+                    ))}
+                </ul>
+              </article>
+            ))}
+          </section>
+        )}
+      </div>
+      <div className="two-columns">
+        <section className="section-block">
           <div className="section-heading">
             <h2>Current Semester</h2>
             <Button variant="ghost" onClick={() => navigate('review')}>
@@ -138,85 +219,9 @@ export function Dashboard({
             <p className="section-empty">No current subjects marked.</p>
           )}
         </section>
-        <section className="panel">
+        <section className="section-block">
           <div className="section-heading">
-            <h2>Eligible Next</h2>
-            <Button variant="ghost" onClick={() => navigate('planner')}>
-              Plan <ArrowUpRight />
-            </Button>
-          </div>
-          {stats.eligible.length ? (
-            <div className="eligible-list">
-              {stats.eligible.slice(0, 4).map((s) => (
-                <button
-                  className="list-row"
-                  key={s.code}
-                  onClick={() => select(s)}
-                >
-                  <div>
-                    <strong>{s.code}</strong>
-                    <p>{s.name}</p>
-                  </div>
-                  <span>{s.units} units</span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <p className="section-empty">
-              {stats.remaining
-                ? 'No subjects eligible yet.'
-                : 'Curriculum complete.'}
-            </p>
-          )}
-          {stats.eligible.length > 4 && (
-            <Button variant="ghost" onClick={() => navigate('map')}>
-              View all {stats.eligible.length}
-            </Button>
-          )}
-        </section>
-      </div>
-      <div className={blockers.length ? 'two-columns' : 'stack'}>
-        {blockers.length > 0 && (
-          <section className="panel">
-            <div className="section-heading">
-              <h2>Blockers</h2>
-              <Button variant="ghost" onClick={() => navigate('map')}>
-                View Map
-              </Button>
-            </div>
-            {blockers.map(({ s, downstream }) => (
-              <article className="blocker" key={s.code}>
-                <button className="subject-link" onClick={() => select(s)}>
-                  <strong>
-                    {s.code} &middot; {s.name}
-                  </strong>
-                </button>
-                <p className="muted">
-                  {statusOf(data.statuses, s.code) === 'current'
-                    ? 'Awaiting a pass'
-                    : statusOf(data.statuses, s.code) === 'failed'
-                      ? 'Retake required'
-                      : 'Not completed'}{' '}
-                  &middot; affects {downstream.length} subjects
-                </p>
-                <p className="blocker-chain">
-                  {s.code} &rarr;{' '}
-                  {data.curriculum.subjects
-                    .filter(
-                      (target) =>
-                        target.prerequisites.includes(s.code) &&
-                        statusOf(data.statuses, target.code) !== 'completed',
-                    )
-                    .map((target) => target.code)
-                    .join(', ')}
-                </p>
-              </article>
-            ))}
-          </section>
-        )}
-        <section className="panel">
-          <div className="section-heading">
-            <h2>Upcoming Plan</h2>
+            <h2>Next Semester</h2>
             <Button variant="ghost" onClick={() => navigate('planner')}>
               {next ? 'Edit Plan' : 'Add Subjects'}
             </Button>
@@ -286,7 +291,7 @@ export function CurriculumMap({
   );
   return (
     <div className="stack">
-      <div className="map-toolbar panel">
+      <div className="map-toolbar">
         <Input
           aria-label="Search subjects"
           placeholder="Search code or title"
@@ -318,7 +323,6 @@ export function CurriculumMap({
             <Pill key={s} status={s} />
           ),
         )}
-        <span className="muted"></span>
       </div>
       {focus && (
         <Notice>
@@ -391,7 +395,6 @@ export function CurriculumMap({
           })}
         </div>
       )}
-      <p className="muted">Select a subject to view requirements.</p>
     </div>
   );
 }
