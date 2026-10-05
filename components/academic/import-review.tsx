@@ -1,14 +1,18 @@
 'use client';
-import { useState, useEffect, type ChangeEvent } from 'react';
+import { useState, useEffect, useRef, type ChangeEvent } from 'react';
 import {
-  UploadCloud,
-  FileSpreadsheet,
-  Download,
-  ArrowRight,
+  Upload,
+  FileText,
+  X,
+  Plus,
+  Trash2,
   Save,
+  ArrowRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Progress } from '@/components/ui/progress';
 import {
   Table,
   TableHeader,
@@ -18,126 +22,165 @@ import {
   TableCell,
 } from '@/components/ui/table';
 import {
-  importCurriculum,
-  validateCurriculum,
-  validateRecord,
-} from '@/lib/import';
-import { sampleCurriculum } from '@/lib/sample';
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from '@/components/ui/alert-dialog';
+import { validateRecord } from '@/lib/import';
+import { extractProspectus } from '@/lib/extract-prospectus';
+import {
+  confirmProspectus,
+  validateProspectusFile,
+  type ProspectusDraft,
+  type DraftRow,
+} from '@/lib/prospectus';
 import {
   defaultSettings,
   matchesSubject,
-  academicState,
   STATUSES,
   statusOf,
-  completedCodes,
   eligibility,
-  type Curriculum,
+  completedCodes,
   type RecordData,
-  type Subject,
   type Status,
 } from '@/lib/academic';
-import { Choice, Notice, Pill, statusLabels, filterOptions } from './shared';
+import { Choice, Notice, statusLabels, filterOptions } from './shared';
+
 export function UploadView({
   hasRecord,
   stage,
 }: {
   hasRecord: boolean;
-  stage: (c: Curriculum) => void;
+  stage: (draft: ProspectusDraft, file: File) => void;
 }) {
-  const [error, setError] = useState(''),
-    [reading, setReading] = useState(false);
-  async function read(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const [file, setFile] = useState<File | null>(null),
+    [error, setError] = useState(''),
+    [reading, setReading] = useState(false),
+    [status, setStatus] = useState(''),
+    [progress, setProgress] = useState(0);
+  const controller = useRef<AbortController | null>(null),
+    input = useRef<HTMLInputElement>(null);
+  useEffect(() => () => controller.current?.abort(), []);
+  function remove() {
+    controller.current?.abort();
+    controller.current = null;
+    setFile(null);
+    setReading(false);
     setError('');
-    setReading(true);
+    setStatus('');
+    setProgress(0);
+    if (input.current) input.current.value = '';
+  }
+  function choose(e: ChangeEvent<HTMLInputElement>) {
+    const next = e.target.files?.[0];
+    remove();
+    if (!next) return;
     try {
-      if (file.size > 1_000_000)
-        throw new Error('Files must be smaller than 1 MB.');
-      stage(importCurriculum(await file.text(), file.name));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not read the file.');
+      validateProspectusFile(next);
+      setFile(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Choose a PDF or image.');
+    }
+  }
+  async function read() {
+    if (!file) return;
+    const job = new AbortController();
+    controller.current = job;
+    setReading(true);
+    setError('');
+    try {
+      const draft = await extractProspectus(
+        file,
+        (message, value) => {
+          setStatus(message);
+          setProgress(value);
+        },
+        job.signal,
+      );
+      if (!job.signal.aborted) stage(draft, file);
+    } catch (err) {
+      if (!job.signal.aborted)
+        setError(
+          err instanceof Error ? err.message : 'Could not read the file.',
+        );
     } finally {
-      setReading(false);
-      event.target.value = '';
+      if (controller.current === job) setReading(false);
     }
   }
   return (
-    <div className="stack">
+    <section className="panel upload-panel">
+      <h2>Upload Prospectus</h2>
+      <p className="muted">Upload your USC curriculum to get started.</p>
       {hasRecord && (
         <Notice tone="warning">
-          Importing creates a review draft. Saving that draft replaces your
-          current curriculum, statuses, and semester plan. Your saved record
-          stays unchanged until then.
+          Your current record stays unchanged until you confirm a replacement.
         </Notice>
       )}
-      <div className="upload-grid">
-        <section className="panel upload-panel">
-          <div className="upload-icon">
-            <UploadCloud size={34} />
+      <input
+        ref={input}
+        className="sr-only"
+        id="prospectus-file"
+        aria-label="Choose prospectus file"
+        type="file"
+        accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+        onChange={choose}
+      />
+      {!file ? (
+        <div className="upload-zone">
+          <FileText size={24} />
+          <Button variant="outline" onClick={() => input.current?.click()}>
+            Choose File
+          </Button>
+          <span>PDF or image &middot; up to 20 MB</span>
+        </div>
+      ) : (
+        <div className="file-selection">
+          <FileText size={22} />
+          <div>
+            <strong>{file.name}</strong>
+            <small>{(file.size / 1024 / 1024).toFixed(2)} MB</small>
           </div>
-          <h2>Bring your curriculum into focus</h2>
-          <p>
-            Upload a structured prospectus, then review subjects and mark your
-            progress.
-          </p>
-          <label className="upload-zone">
-            <FileSpreadsheet size={28} />
-            <strong>
-              {reading ? 'Reading curriculum…' : 'Choose a CSV or JSON file'}
-            </strong>
-            <span>Up to 1 MB · 300 subjects</span>
-            <input
-              aria-label="Upload curriculum file"
-              type="file"
-              accept=".csv,.json,text/csv,application/json"
-              onChange={read}
-              disabled={reading}
-            />
-          </label>
-          {error && <Notice tone="warning">{error}</Notice>}
-          <p className="muted">
-            CSV and JSON are parsed and validated. PDF scans, photos, and Word
-            documents are not parsed. Transcribe them using the template below.
-          </p>
-          <a className="text-link" href="/curriculum-template.csv" download>
-            <Download size={17} />
-            Download CSV template
-          </a>
-        </section>
-        <aside className="stack">
-          <section className="panel">
-            <p className="eyebrow">JUST EXPLORING?</p>
-            <h2>Try a sample roadmap</h2>
-            <p className="muted">
-              A fictional 4-year Computer Science curriculum (not an official
-              USC prospectus) with 30 subjects, prerequisite chains, and a
-              corequisite pair. All subjects begin as not taken.
-            </p>
-            <Button
-              variant="outline"
-              onClick={() => stage(structuredClone(sampleCurriculum))}
-            >
-              Review sample curriculum <ArrowRight />
-            </Button>
-          </section>
-          <section className="panel">
-            <h2>What to include</h2>
-            <ul className="help-list">
-              <li>Code, name, units, year, and semester</li>
-              <li>
-                Prerequisites and corequisites as codes separated by semicolons
-              </li>
-              <li>Optional offered semesters: 1, 2, or 1;2</li>
-            </ul>
-            <p className="muted">
-              If offerings are omitted, a subject is offered only in its listed
-              semester. Correct these assumptions during review.
-            </p>
-          </section>
-        </aside>
-      </div>
-    </div>
+          <Button variant="outline" onClick={() => input.current?.click()}>
+            Replace
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Remove prospectus"
+            onClick={remove}
+          >
+            <X />
+          </Button>
+        </div>
+      )}
+      {reading && (
+        <output className="extraction-progress">
+          <p>{status}</p>
+          <Progress
+            value={progress}
+            aria-label="Prospectus extraction progress"
+          />
+          <Button variant="ghost" onClick={remove}>
+            Cancel
+          </Button>
+        </output>
+      )}
+      {error && <Notice tone="warning">{error}</Notice>}
+      {file && !reading && (
+        <Button onClick={() => void read()}>
+          <Upload size={16} />
+          Read Prospectus
+        </Button>
+      )}
+      <p className="muted">
+        Read locally in your browser. Review before saving.
+      </p>
+    </section>
   );
 }
 export function ReviewView({
@@ -149,263 +192,423 @@ export function ReviewView({
   cancel,
 }: {
   data: RecordData | null;
-  pending: Curriculum | null;
+  pending: (ProspectusDraft & { url: string }) | null;
   save: (d: RecordData) => Promise<boolean>;
   busy: boolean;
-  onDone: () => void;
+  onDone: (confirmed: boolean) => void;
   cancel: () => void;
 }) {
-  const [curriculum, setCurriculum] = useState<Curriculum>(() =>
-    structuredClone(pending ?? data!.curriculum),
+  const [draft, setDraft] = useState<ProspectusDraft | null>(() =>
+    pending ? structuredClone({ ...pending, url: undefined }) : null,
   );
-  const [statuses, setStatuses] = useState<Record<string, Status>>(() =>
-    pending ? {} : { ...data!.statuses },
-  );
-  const [error, setError] = useState(''),
-    [dirty, setDirty] = useState(!!pending),
+  const [statuses, setStatuses] = useState<Record<string, Status>>(() => ({
+      ...data?.statuses,
+    })),
+    [error, setError] = useState(''),
     [search, setSearch] = useState(''),
-    [filter, setFilter] = useState('all');
+    [filter, setFilter] = useState('all'),
+    [reviewed, setReviewed] = useState(false),
+    [replaceOpen, setReplaceOpen] = useState(false);
+  const [dirty, setDirty] = useState(false);
   useEffect(() => {
-    const handler = (event: BeforeUnloadEvent) => {
-      if (dirty) event.preventDefault();
+    const warn = (e: BeforeUnloadEvent) => {
+      if (dirty) e.preventDefault();
     };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
   }, [dirty]);
-  function update(code: string, key: keyof Subject, value: unknown) {
+  function update(id: string, key: keyof DraftRow, value: string) {
     setDirty(true);
-    setCurriculum((c) => ({
-      ...c,
-      subjects: c.subjects.map((s) =>
-        s.code === code ? { ...s, [key]: value } : s,
-      ),
-    }));
+    setReviewed(false);
+    setDraft((old) =>
+      old
+        ? {
+            ...old,
+            rows: old.rows.map((r) =>
+              r.id === id ? { ...r, [key]: value } : r,
+            ),
+          }
+        : old,
+    );
   }
-  async function commit() {
+  async function confirm() {
+    if (!draft) return;
     setError('');
     try {
-      const valid = validateCurriculum(curriculum);
-      const next: RecordData = {
-        ...(data?.profile ? { profile: data.profile } : {}),
-        curriculum: valid,
-        statuses,
-        plan: pending ? [] : data!.plan,
-        settings: pending ? defaultSettings() : data!.settings,
-      };
-      if (await save(next)) {
+      const curriculum = confirmProspectus(draft);
+      if (
+        await save({
+          ...(data?.profile ? { profile: data.profile } : {}),
+          curriculum,
+          statuses: {},
+          plan: [],
+          settings: defaultSettings(),
+          setupComplete: false,
+        })
+      ) {
         setDirty(false);
-        onDone();
+        onDone(true);
       }
-    } catch (e) {
+    } catch (err) {
       setError(
-        e instanceof Error ? e.message : 'Review the curriculum fields.',
+        err instanceof Error ? err.message : 'Review the highlighted fields.',
       );
+    } finally {
+      setReplaceOpen(false);
     }
   }
-  const completed = completedCodes(statuses);
-  const current = new Set(
-    Object.entries(statuses)
-      .filter(([, s]) => s === 'current')
-      .map(([c]) => c),
+  async function mark() {
+    if (!data) return;
+    setError('');
+    try {
+      const completeStatuses = Object.fromEntries(
+        data.curriculum.subjects.map((s) => [
+          s.code,
+          statusOf(statuses, s.code),
+        ]),
+      );
+      if (
+        await save(
+          validateRecord({
+            ...data,
+            statuses: completeStatuses,
+            setupComplete: true,
+          }),
+        )
+      ) {
+        setDirty(false);
+        onDone(false);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save statuses.');
+    }
+  }
+  if (draft && pending)
+    return (
+      <div className="stack">
+        <div className="action-bar">
+          <div>
+            <h2>Review Curriculum</h2>
+            <p className="muted">Check every row against your prospectus.</p>
+          </div>
+          <div className="row">
+            <a
+              className="text-link"
+              href={pending.url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open prospectus
+            </a>
+            <Button variant="outline" onClick={cancel} disabled={busy}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+        {error && <Notice tone="warning">{error}</Notice>}
+        {!draft.rows.length && (
+          <Notice tone="warning">
+            No subject rows were recognized. Add rows from the prospectus or
+            upload a clearer copy.
+          </Notice>
+        )}
+        <div className="panel review-controls">
+          <label htmlFor="curriculum-name">
+            Curriculum name
+            <Input
+              id="curriculum-name"
+              value={draft.name}
+              maxLength={180}
+              onChange={(e) => {
+                setDirty(true);
+                setDraft({ ...draft, name: e.target.value });
+              }}
+            />
+          </label>
+          <span className="muted">
+            {draft.rows.length} rows &middot; {draft.filename}
+          </span>
+        </div>
+        <section className="panel table-panel extraction-table">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                {[
+                  'Code',
+                  'Subject',
+                  'Units',
+                  'Prerequisite',
+                  'Year',
+                  'Semester',
+                  '',
+                ].map((h, i) => (
+                  <TableHead key={i}>{h}</TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {draft.rows.map((r, index) => (
+                <TableRow key={r.id}>
+                  <TableCell>
+                    <Input
+                      aria-label={'Row ' + (index + 1) + ' code'}
+                      value={r.code}
+                      onChange={(e) => update(r.id, 'code', e.target.value)}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      aria-label={'Row ' + (index + 1) + ' subject'}
+                      value={r.name}
+                      onChange={(e) => update(r.id, 'name', e.target.value)}
+                    />
+                    <details className="row-evidence">
+                      <summary>Source / corequisite</summary>
+                      <p>{r.evidence || 'Manually entered from prospectus'}</p>
+                      <label htmlFor={'coreq-' + r.id}>
+                        Corequisite
+                        <Input
+                          id={'coreq-' + r.id}
+                          value={r.corequisites}
+                          onChange={(e) =>
+                            update(r.id, 'corequisites', e.target.value)
+                          }
+                          aria-label={'Row ' + (index + 1) + ' corequisite'}
+                        />
+                      </label>
+                    </details>
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="30"
+                      step=".5"
+                      aria-label={'Row ' + (index + 1) + ' units'}
+                      value={r.units}
+                      onChange={(e) => update(r.id, 'units', e.target.value)}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      aria-label={'Row ' + (index + 1) + ' prerequisite'}
+                      value={r.prerequisites}
+                      placeholder="None"
+                      onChange={(e) =>
+                        update(r.id, 'prerequisites', e.target.value)
+                      }
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="8"
+                      aria-label={'Row ' + (index + 1) + ' year'}
+                      value={r.year}
+                      onChange={(e) => update(r.id, 'year', e.target.value)}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Choice
+                      label={'Row ' + (index + 1) + ' semester'}
+                      value={r.semester}
+                      onChange={(v) => update(r.id, 'semester', v)}
+                      options={[
+                        { value: '', label: 'Select' },
+                        { value: '1', label: '1st' },
+                        { value: '2', label: '2nd' },
+                      ]}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={'Remove row ' + (index + 1)}
+                      onClick={() => {
+                        setDirty(true);
+                        setReviewed(false);
+                        setDraft({
+                          ...draft,
+                          rows: draft.rows.filter((row) => row.id !== r.id),
+                        });
+                      }}
+                    >
+                      <Trash2 size={16} />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </section>
+        <div className="action-bar">
+          <Button
+            variant="outline"
+            disabled={draft.rows.length >= 300}
+            onClick={() => {
+              setDirty(true);
+              setReviewed(false);
+              setDraft({
+                ...draft,
+                rows: [
+                  ...draft.rows,
+                  {
+                    id: crypto.randomUUID(),
+                    code: '',
+                    name: '',
+                    units: '',
+                    prerequisites: '',
+                    corequisites: '',
+                    year: '',
+                    semester: '',
+                    evidence: '',
+                  },
+                ],
+              });
+            }}
+          >
+            <Plus />
+            Add Row
+          </Button>
+          <p className="muted">
+            Separate prerequisites with semicolons. Offerings follow the listed
+            semester.
+          </p>
+        </div>
+        <details className="panel extracted-text">
+          <summary>Extracted text</summary>
+          <pre>{draft.text || 'No readable text found.'}</pre>
+        </details>
+        <div className="panel confirmation-bar">
+          <label className="checkbox-label" htmlFor="review-checked">
+            <Checkbox
+              id="review-checked"
+              checked={reviewed}
+              onCheckedChange={(v) => setReviewed(!!v)}
+            />
+            I checked all subjects and requirements against my prospectus.
+          </label>
+          <Button
+            disabled={busy || !reviewed || !draft.rows.length}
+            onClick={() => (data ? setReplaceOpen(true) : void confirm())}
+          >
+            {busy ? 'Saving...' : 'Confirm Curriculum'}
+            <ArrowRight />
+          </Button>
+        </div>
+        <AlertDialog open={replaceOpen} onOpenChange={setReplaceOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Replace curriculum?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This replaces your saved curriculum, subject statuses, and
+                semester plan.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction disabled={busy} onClick={() => void confirm()}>
+                Confirm replacement
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    );
+  if (!data) return null;
+  const shown = data.curriculum.subjects.filter((s) =>
+    matchesSubject(s, statuses, search, filter),
   );
-  const inconsistencies = curriculum.subjects.filter(
+  const concurrent = new Set(
+    Object.keys(statuses).filter((c) => statuses[c] === 'current'),
+  );
+  const conflicts = data.curriculum.subjects.filter(
     (s) =>
       statuses[s.code] === 'current' &&
-      !eligibility(s, completed, current).eligible,
-  );
-  const filtered = curriculum.subjects.filter((s) =>
-    matchesSubject(s, statuses, search, filter),
+      !eligibility(s, completedCodes(statuses), concurrent).eligible,
   );
   return (
     <div className="stack">
-      {pending && (
-        <Notice>
-          {pending.source === 'sample'
-            ? 'SAMPLE DATA: fictional curriculum for exploration.'
-            : 'Your file has been parsed successfully.'}{' '}
-          Review {curriculum.subjects.length} subjects before saving.
+      <div className="action-bar">
+        <div>
+          <h2>Mark Subject Status</h2>
+          <p className="muted">
+            Update each subject, then save your academic record.
+          </p>
+        </div>
+        <Button onClick={() => void mark()} disabled={busy}>
+          <Save />
+          {busy
+            ? 'Saving...'
+            : data.setupComplete === false
+              ? 'Save & Open Dashboard'
+              : 'Save Statuses'}
+        </Button>
+      </div>
+      {error && <Notice tone="warning">{error}</Notice>}
+      {conflicts.length > 0 && (
+        <Notice tone="warning">
+          Unmet requirements for current subjects:{' '}
+          {conflicts.map((s) => s.code).join(', ')}.
         </Notice>
       )}
-      {error && <Notice tone="warning">{error}</Notice>}
-      <section className="panel review-controls">
-        <div>
-          <label htmlFor="curriculum-name">Curriculum name</label>
-          <Input
-            id="curriculum-name"
-            value={curriculum.name}
-            maxLength={180}
-            onChange={(e) => {
-              setDirty(true);
-              setCurriculum((c) => ({ ...c, name: e.target.value }));
-            }}
-          />
-        </div>
+      <div className="record-toolbar">
         <Input
           aria-label="Search review subjects"
-          placeholder="Find a subject…"
+          placeholder="Search code or subject"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <div className="row">
-          <Button variant="outline" onClick={cancel} disabled={busy}>
-            Cancel review
-          </Button>
-          <Button onClick={() => void commit()} disabled={busy}>
-            <Save />
-            {busy
-              ? 'Saving…'
-              : pending
-                ? 'Save curriculum & statuses'
-                : 'Save changes'}
-          </Button>
-        </div>
-      </section>
-      <section className="panel curriculum-context">
-        <label htmlFor="program-name">
-          Academic program
-          <Input
-            id="program-name"
-            value={curriculum.program ?? ''}
-            maxLength={120}
-            onChange={(e) => {
-              setDirty(true);
-              setCurriculum((c) => ({ ...c, program: e.target.value }));
-            }}
-            placeholder="Program on your prospectus"
-          />
-        </label>
-        <label htmlFor="curriculum-year">
-          Curriculum year
-          <Input
-            id="curriculum-year"
-            type="number"
-            min="1950"
-            max="2100"
-            value={curriculum.curriculumYear ?? ''}
-            onChange={(e) => {
-              setDirty(true);
-              setCurriculum((c) => ({
-                ...c,
-                curriculumYear:
-                  e.target.value === '' ? undefined : Number(e.target.value),
-              }));
-            }}
-            placeholder="Curriculum edition year"
-          />
-        </label>
-      </section>
-      <p className="muted">
-        Edit names, units, sequence, and requirements directly. Separate
-        requirement codes with semicolons. Changes remain a draft until saved.
-      </p>
-      {inconsistencies.length > 0 && (
-        <Notice tone="warning">
-          Current enrollment conflicts:{' '}
-          {inconsistencies.map((s) => s.code).join(', ')} have unmet
-          requirements. You may record your actual enrollment, but these
-          subjects will not count as completed.
-        </Notice>
-      )}
-      <div className="row">
         <Choice
           label="Filter academic record"
           value={filter}
           onChange={setFilter}
-          options={filterOptions}
+          options={
+            data.setupComplete === false
+              ? filterOptions.filter(
+                  (o) => !['eligible', 'blocked'].includes(o.value),
+                )
+              : filterOptions
+          }
         />
-        <span className="muted">
-          {filtered.length} of {curriculum.subjects.length} subjects
-        </span>
+        <span className="muted">{shown.length} subjects</span>
       </div>
-      <section className="panel table-panel">
+      <section className="panel table-panel status-table">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Code / subject name</TableHead>
-              <TableHead>Units</TableHead>
-              <TableHead>Year / semester</TableHead>
-              <TableHead>Prerequisites / corequisites</TableHead>
-              <TableHead>Offered semesters</TableHead>
-              <TableHead>Academic status</TableHead>
+              {[
+                'Code',
+                'Subject',
+                'Units',
+                'Prerequisite',
+                'Year / Semester',
+                'Status',
+              ].map((h) => (
+                <TableHead key={h}>{h}</TableHead>
+              ))}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map((s) => (
+            {shown.map((s) => (
               <TableRow key={s.code}>
-                <TableCell className="subject-edit">
-                  <strong>{s.code}</strong>{' '}
-                  <Pill status={academicState(s, statuses)} />
-                  <Input
-                    aria-label={s.code + ' name'}
-                    value={s.name}
-                    onChange={(e) => update(s.code, 'name', e.target.value)}
-                  />
+                <TableCell>
+                  <strong>{s.code}</strong>
+                </TableCell>
+                <TableCell>{s.name}</TableCell>
+                <TableCell>{s.units}</TableCell>
+                <TableCell>
+                  {s.prerequisites.join(', ') || 'None'}
+                  {s.corequisites.length > 0 && (
+                    <small className="muted">
+                      Co: {s.corequisites.join(', ')}
+                    </small>
+                  )}
                 </TableCell>
                 <TableCell>
-                  <Input
-                    className="number-field"
-                    type="number"
-                    min="0"
-                    max="30"
-                    step=".5"
-                    aria-label={s.code + ' units'}
-                    value={s.units}
-                    onChange={(e) => update(s.code, 'units', e.target.value)}
-                  />
-                </TableCell>
-                <TableCell>
-                  <div className="field-pair">
-                    <Input
-                      className="number-field"
-                      type="number"
-                      min="1"
-                      max="8"
-                      aria-label={s.code + ' year'}
-                      value={s.year}
-                      onChange={(e) => update(s.code, 'year', e.target.value)}
-                    />
-                    <Choice
-                      label={s.code + ' semester'}
-                      value={String(s.semester)}
-                      onChange={(v) => update(s.code, 'semester', Number(v))}
-                      options={[
-                        { value: '1', label: 'Sem 1' },
-                        { value: '2', label: 'Sem 2' },
-                      ]}
-                    />
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Input
-                    aria-label={s.code + ' prerequisites'}
-                    placeholder="Prerequisites"
-                    value={s.prerequisites.join(';')}
-                    onChange={(e) =>
-                      update(s.code, 'prerequisites', e.target.value.split(';'))
-                    }
-                  />
-                  <Input
-                    aria-label={s.code + ' corequisites'}
-                    placeholder="Corequisites"
-                    value={s.corequisites.join(';')}
-                    onChange={(e) =>
-                      update(s.code, 'corequisites', e.target.value.split(';'))
-                    }
-                  />
-                </TableCell>
-                <TableCell>
-                  <Choice
-                    label={s.code + ' offerings'}
-                    value={s.offered.join(';')}
-                    onChange={(v) =>
-                      update(s.code, 'offered', v.split(';').map(Number))
-                    }
-                    options={[
-                      { value: '1', label: 'Semester 1' },
-                      { value: '2', label: 'Semester 2' },
-                      { value: '1;2', label: 'Both semesters' },
-                    ]}
-                  />
+                  {s.year} / {s.semester}
                 </TableCell>
                 <TableCell>
                   <Choice
@@ -415,9 +618,9 @@ export function ReviewView({
                       setDirty(true);
                       setStatuses((old) => ({ ...old, [s.code]: v as Status }));
                     }}
-                    options={STATUSES.map((v) => ({
-                      value: v,
-                      label: statusLabels[v],
+                    options={STATUSES.map((value) => ({
+                      value,
+                      label: statusLabels[value],
                     }))}
                   />
                 </TableCell>
@@ -425,16 +628,8 @@ export function ReviewView({
             ))}
           </TableBody>
         </Table>
-        {!filtered.length && (
-          <p className="panel">No subjects match your search.</p>
-        )}
+        {!shown.length && <p className="table-empty">No matching subjects.</p>}
       </section>
-      <Notice>
-        {Object.values(statuses).filter((s) => s === 'completed').length}{' '}
-        completed ·{' '}
-        {Object.values(statuses).filter((s) => s === 'current').length}{' '}
-        currently taking · {dirty ? 'Unsaved review draft' : 'No changes yet'}
-      </Notice>
     </div>
   );
 }
@@ -476,10 +671,7 @@ export function ProfileSettings({
   return (
     <section className="panel profile-settings">
       <h2>Student profile</h2>
-      <p className="muted">
-        Your preferred name and curriculum context appear throughout your
-        academic workspace.
-      </p>
+      <p className="muted">Your name and academic program.</p>
       {error && <Notice tone="warning">{error}</Notice>}
       <label htmlFor="student-name">
         Student name
@@ -512,11 +704,7 @@ export function ProfileSettings({
           onChange={(e) => setYear(e.target.value)}
         />
       </label>
-      <p className="muted">
-        Program and curriculum year are entered from your own prospectus. They
-        do not change subject requirements. Planning assumptions are available
-        in Semester Planner.
-      </p>
+      <p className="muted">Planning assumptions are in Semester Planner.</p>
       <Button disabled={busy} onClick={() => void commit()}>
         <Save />
         {busy ? 'Saving…' : 'Save profile'}

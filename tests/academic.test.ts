@@ -123,9 +123,7 @@ void test('Plan catches same-term, duplicate and overloaded subjects', () => {
     { term: 1, codes: ['A'] },
   ];
   const warnings = planWarnings(r);
-  assert.ok(
-    warnings.some((w) => w.includes('Prerequisite not satisfied. Requires: A')),
-  );
+  assert.ok(warnings.some((w) => w.includes('Missing prerequisite: A')));
   assert.ok(warnings.some((w) => w.includes('exceeds')));
   assert.ok(warnings.some((w) => w.includes('more than once')));
 });
@@ -301,9 +299,7 @@ void test('Unit overload never contributes projected completions', () => {
     { term: 1, codes: ['B'] },
   ];
   assert.equal(evaluatePlan(r).terms[1].progress, 0);
-  assert.ok(
-    planWarnings(r).some((w) => w.includes('Prerequisite not satisfied')),
-  );
+  assert.ok(planWarnings(r).some((w) => w.includes('Missing prerequisite')));
 });
 
 void test('Candidates use earlier planned passes; moving a prerequisite exposes conflicts', () => {
@@ -314,7 +310,9 @@ void test('Candidates use earlier planned passes; moving a prerequisite exposes 
   r.plan = movePlannedSubject(r.plan, 'B', 1);
   assert.equal(evaluatePlan(r).terms[1].completedUnits, 10);
   r.plan = movePlannedSubject(r.plan, 'A', 2);
-  assert.ok(planWarnings(r).some((w) => w.startsWith('B: Prerequisite')));
+  assert.ok(
+    planWarnings(r).some((w) => w.startsWith('B: Missing prerequisite')),
+  );
   assert.equal(
     r.plan.flatMap((t) => t.codes).filter((c) => c === 'A').length,
     1,

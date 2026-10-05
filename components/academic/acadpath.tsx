@@ -9,7 +9,6 @@ import {
   CalendarDays,
   FlaskConical,
   LogOut,
-  ArrowUpRight,
   Settings,
 } from 'lucide-react';
 import {
@@ -21,7 +20,6 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
-  SidebarTrigger,
   useSidebar,
 } from '@/components/ui/sidebar';
 import {
@@ -35,15 +33,14 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import {
   type RecordData,
-  type Curriculum,
   type Subject,
   academicState,
   eligibility,
   completedCodes,
-  descendants,
-  prerequisiteChain,
   summary,
+  isSetupComplete,
 } from '@/lib/academic';
+import type { ProspectusDraft } from '@/lib/prospectus';
 import { Dashboard, CurriculumMap } from './overview';
 import { UploadView, ReviewView, ProfileSettings } from './import-review';
 import { Planner, Simulator } from './planning';
@@ -55,7 +52,7 @@ const pages = [
   ['map', 'Curriculum Map', GitBranch],
   ['planner', 'Semester Planner', CalendarDays],
   ['simulator', 'What-If Simulator', FlaskConical],
-  ['settings', 'Profile / Settings', Settings],
+  ['settings', 'Settings', Settings],
 ] as const;
 type Page = (typeof pages)[number][0] | 'upload';
 export default function AcadPath(props: { name: string; local: boolean }) {
@@ -75,8 +72,10 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [message, setMessage] = useState('');
-  const [page, setPage] = useState<Page>('upload'),
-    [pending, setPending] = useState<Curriculum | null>(null),
+  const [page, setPage] = useState<Page>('dashboard'),
+    [pending, setPending] = useState<
+      (ProspectusDraft & { url: string }) | null
+    >(null),
     [selected, setSelected] = useState<Subject | null>(null);
   const load = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -92,11 +91,13 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
       setRevision(result.revision);
       const hash = location.hash.slice(1);
       setPage(
-        hash === 'upload' || pages.some((p) => p[0] === hash)
-          ? (hash as Page)
-          : result.data
+        result.data?.setupComplete === false
+          ? 'review'
+          : !result.data
             ? 'dashboard'
-            : 'upload',
+            : hash === 'upload' || pages.some((p) => p[0] === hash)
+              ? (hash as Page)
+              : 'dashboard',
       );
     } catch (e) {
       if (!signal?.aborted)
@@ -148,15 +149,25 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
       setBusy(false);
     }
   }
-  const stage = (c: Curriculum) => {
-    setPending(c);
+  const stage = (draft: ProspectusDraft, file: File) => {
+    setPending({ ...draft, url: URL.createObjectURL(file) });
     navigate('review');
   };
-  const stats = useMemo(() => (data ? summary(data) : null), [data]);
+  useEffect(
+    () => () => {
+      if (pending) URL.revokeObjectURL(pending.url);
+    },
+    [pending],
+  );
+  const ready = isSetupComplete(data);
+  const stats = useMemo(
+    () => (data && isSetupComplete(data) ? summary(data) : null),
+    [data],
+  );
   const studentName = data?.profile?.name ?? name;
   const pageLabel =
     page === 'upload'
-      ? 'Import curriculum'
+      ? 'Upload Prospectus'
       : pages.find((p) => p[0] === page)?.[1];
   useEffect(() => {
     const context = (
@@ -191,13 +202,16 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
               Object.keys(input).length
             )
               throw new Error('Expected an empty object.');
-            return data
+            return data && isSetupComplete(data)
               ? {
                   curriculum: data.curriculum.name,
                   source: data.curriculum.source,
                   ...summary(data),
                 }
-              : { curriculum: null };
+              : {
+                  curriculum: data?.curriculum.name ?? null,
+                  setupRequired: true,
+                };
           },
         },
         { signal: lifecycle.signal },
@@ -207,7 +221,7 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
   }, [data]);
   return (
     <>
-      <Sidebar>
+      <Sidebar collapsible="none" className="desktop-sidebar">
         <SidebarHeader className="nav-brand">
           <div className="brand">
             <GraduationCap />
@@ -226,7 +240,11 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
                       page === id || (id === 'review' && page === 'upload')
                     }
                     onClick={() => navigate(id)}
-                    disabled={busy}
+                    disabled={
+                      busy ||
+                      (!ready && !['dashboard', 'review'].includes(id)) ||
+                      (!data && id === 'review')
+                    }
                     className="nav-button"
                   >
                     <Icon />
@@ -235,20 +253,16 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
                 </SidebarMenuItem>
               ))}
           </SidebarMenu>
-          <div className="nav-note">
-            <p className="nav-label">ACADEMIC PATHWAY</p>
-            <p>Curriculum → Progress → Eligibility → Semester plan</p>
-          </div>
         </SidebarContent>
         <SidebarFooter className="nav-footer">
           <SidebarMenuButton
             className="nav-button"
             isActive={page === 'settings'}
             onClick={() => navigate('settings')}
-            disabled={busy}
+            disabled={busy || !data}
           >
             <Settings />
-            <span>Profile / Settings</span>
+            <span>Settings</span>
           </SidebarMenuButton>
           <div className="row profile-summary">
             <span className="avatar">
@@ -270,7 +284,6 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
       <main className="workspace">
         <header className="topbar">
           <div className="row">
-            <SidebarTrigger />
             <strong>{pageLabel}</strong>
           </div>
           <span className="topbar-context">
@@ -280,28 +293,28 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
               : ''}
           </span>
           <span className="save-state">
-            {busy ? 'Saving…' : data ? 'Saved record' : 'Get started'}
+            {busy ? 'Saving...' : ready ? 'Saved record' : 'Curriculum setup'}
           </span>
         </header>
         <div className="page-content">
           <div className="page-title">
             <div>
-              <p className="eyebrow">
-                {page === 'dashboard'
-                  ? 'YOUR ACADEMIC PATHWAY'
-                  : 'UNIVERSITY OF SAN CARLOS · CEBU'}
-              </p>
               <h1>
-                {page === 'dashboard' ? `Good day, ${studentName}` : pageLabel}
-              </h1>
-              <p className="muted">
                 {page === 'dashboard'
-                  ? "Here's your academic progress."
-                  : (data?.curriculum.name ??
-                    'Start with your curriculum. Plan with confidence.')}
-              </p>
+                  ? ready
+                    ? `Good day, ${studentName}`
+                    : 'Welcome to AcadPath'
+                  : pageLabel}
+              </h1>
+              {page === 'dashboard' && (
+                <p className="muted">
+                  {ready
+                    ? 'Your academic pathway.'
+                    : 'Plan your USC academic journey.'}
+                </p>
+              )}
             </div>
-            {data && (
+            {ready && data && (
               <span className={'source-badge ' + data.curriculum.source}>
                 {data.curriculum.source === 'sample'
                   ? 'SAMPLE DATA'
@@ -332,17 +345,15 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
             </Blank>
           ) : (
             <>
-              {page === 'review' && (
+              {page === 'review' && data && !pending && (
                 <div className="curriculum-actions">
-                  <p className="muted">
-                    Review your prospectus and update your academic record.
-                  </p>
+                  <span className="muted">{data.curriculum.name}</span>
                   <Button
                     variant="outline"
                     disabled={busy}
                     onClick={() => navigate('upload')}
                   >
-                    Import or select curriculum <ArrowUpRight />
+                    Replace Prospectus
                   </Button>
                 </div>
               )}
@@ -356,9 +367,13 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
                   pending={pending}
                   save={save}
                   busy={busy}
-                  onDone={() => {
-                    navigate('dashboard');
-                    setMessage('Your academic record has been saved.');
+                  onDone={(confirmed) => {
+                    navigate(confirmed ? 'review' : 'dashboard');
+                    setMessage(
+                      confirmed
+                        ? 'Curriculum confirmed. Mark your subjects next.'
+                        : 'Academic record saved.',
+                    );
                   }}
                   cancel={() => {
                     setPending(null);
@@ -367,10 +382,10 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
                 />
               ) : page === 'review' ? (
                 <Blank title="No curriculum to review">
-                  Import your prospectus or select the sample curriculum above.
+                  Upload your prospectus to get started.
                 </Blank>
               ) : null}
-              {data && page === 'dashboard' && (
+              {ready && data && page === 'dashboard' && (
                 <Dashboard
                   data={data}
                   stats={stats!}
@@ -378,13 +393,15 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
                   navigate={navigate}
                 />
               )}
-              {data && page === 'map' && (
+              {ready && data && page === 'map' && (
                 <CurriculumMap data={data} select={setSelected} />
               )}
-              {data && page === 'planner' && (
+              {ready && data && page === 'planner' && (
                 <Planner key={revision} data={data} save={save} busy={busy} />
               )}
-              {data && page === 'simulator' && <Simulator data={data} />}
+              {ready && data && page === 'simulator' && (
+                <Simulator data={data} />
+              )}
               {data && page === 'settings' && (
                 <ProfileSettings
                   key={revision}
@@ -394,25 +411,26 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
                   busy={busy}
                 />
               )}
-              {!data && !['upload', 'review'].includes(page) && (
-                <Blank title="Your roadmap starts here">
-                  <p>
-                    Import your prospectus or explore the labeled sample
-                    curriculum.
+              {!ready && !['upload', 'review', 'settings'].includes(page) && (
+                <section className="panel setup-card">
+                  <h2>
+                    {data ? 'Mark your subjects' : 'Set up your curriculum'}
+                  </h2>
+                  <p className="muted">
+                    {data
+                      ? 'Save your subject statuses to open your pathway.'
+                      : 'Upload your USC prospectus to get started.'}
                   </p>
-                  <Button onClick={() => navigate('upload')}>
-                    Upload prospectus <ArrowUpRight />
+                  <Button onClick={() => navigate(data ? 'review' : 'upload')}>
+                    {data ? 'Mark Subject Status' : 'Upload Prospectus'}
                   </Button>
-                </Blank>
+                  {!data && <small className="muted">PDF or image</small>}
+                </section>
               )}
             </>
           )}
           <footer className="page-footer">
-            AcadPath{' '}
-            <span>
-              Plan thoughtfully. Confirm your final enrollment with your
-              adviser.
-            </span>
+            AcadPath <span>Confirm enrollment with your adviser.</span>
           </footer>
         </div>
       </main>
@@ -441,35 +459,22 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
                   {academicState(selected, data.statuses) === 'completed'
                     ? 'This subject is completed.'
                     : academicState(selected, data.statuses) === 'current'
-                      ? 'You are currently taking this subject. It unlocks dependents only after passing.'
+                      ? 'Currently taking. Pass to unlock dependent subjects.'
                       : eligibility(selected, completedCodes(data.statuses))
                             .eligible
-                        ? 'All requirements are satisfied. Check term offerings before enrolling.'
-                        : 'Complete the prerequisites below. Corequisites may be taken in the same term.'}
+                        ? 'Requirements satisfied. Check semester offerings.'
+                        : 'Missing requirements below. Corequisites can be taken together.'}
                 </p>
                 <h3>Direct prerequisites</h3>
                 <RequirementList codes={selected.prerequisites} data={data} />
                 <h3>Corequisites</h3>
                 <RequirementList codes={selected.corequisites} data={data} />
-                <h3>Full prerequisite chain</h3>
-                <p>
-                  {prerequisiteChain(
-                    data.curriculum.subjects,
-                    selected.code,
-                  ).join(', ') || 'No earlier requirements.'}
-                </p>
-                <h3>Directly unlocks</h3>
+                <h3>Unlocks</h3>
                 <p>
                   {data.curriculum.subjects
                     .filter((s) => s.prerequisites.includes(selected.code))
                     .map((s) => s.code)
                     .join(', ') || 'No direct dependents.'}
-                </p>
-                <h3>Downstream subjects</h3>
-                <p>
-                  {descendants(data.curriculum.subjects, selected.code).join(
-                    ', ',
-                  ) || 'None'}
                 </p>
                 <h3>Offered in</h3>
                 <p>

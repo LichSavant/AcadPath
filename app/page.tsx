@@ -18,15 +18,8 @@ export default async function Home() {
           <span>University of San Carlos</span>
         </div>
         <p className="eyebrow">ACADEMIC PATHWAY PLANNER · USC CEBU</p>
-        <h1>
-          Make your next
-          <br />
-          semester count.
-        </h1>
-        <p className="lede">
-          Turn your curriculum into a clear academic roadmap. Know what is
-          complete, what is next, and what gets you there.
-        </p>
+        <h1>Welcome to AcadPath</h1>
+        <p className="lede">Plan your USC academic journey.</p>
         <a
           className="primary-link"
           href={local ? '/workspace' : chatGPTSignInPath('/workspace')}
@@ -37,38 +30,31 @@ export default async function Home() {
         </a>
         <p className="muted">
           {local
-            ? 'Development mode: one local student profile. Hosted accounts use secure sign-in.'
+            ? 'Local development profile.'
             : 'Your academic record is private to your account.'}
         </p>
         <div className="login-features">
           <span>
             <GitBranch />
-            Understand your prerequisites
+            Check prerequisites
           </span>
           <span>
             <CalendarDays />
-            Plan a realistic path to graduation
+            Plan your semesters
           </span>
         </div>
       </section>
       <aside className="login-note">
         <p className="eyebrow">A CLEARER PATH FORWARD</p>
-        <h2>
-          Small decisions.
-          <br />A bigger picture.
-        </h2>
+        <h2>Your path, step by step.</h2>
         <div className="path-line">
           <span>01</span>
-          <p>Import your curriculum</p>
+          <p>Upload your prospectus</p>
           <span>02</span>
           <p>Mark your progress</p>
           <span>03</span>
           <p>Plan what comes next</p>
         </div>
-        <p>
-          Built around your subjects and their actual prerequisite
-          relationships.
-        </p>
       </aside>
     </main>
   );

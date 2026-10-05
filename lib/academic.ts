@@ -20,6 +20,7 @@ export type Curriculum = {
   source: 'imported' | 'sample';
   program?: string;
   curriculumYear?: number;
+  prospectus?: { filename: string; method: 'pdf-text' | 'ocr' | 'mixed' };
   subjects: Subject[];
 };
 export type Settings = {
@@ -30,12 +31,16 @@ export type Settings = {
 };
 export type Plan = { term: number; codes: string[] }[];
 export type RecordData = {
+  setupComplete?: boolean;
   profile?: { name: string };
   curriculum: Curriculum;
   statuses: Record<string, Status>;
   plan: Plan;
   settings: Settings;
 };
+export function isSetupComplete(data: RecordData | null): boolean {
+  return !!data && data.setupComplete !== false;
+}
 export const defaultSettings = (): Settings => ({
   startYear: new Date().getFullYear(),
   startSemester: 2,
@@ -145,7 +150,7 @@ export function termInfo(settings: Settings, offset: number) {
 }
 export function termLabel(settings: Settings, offset: number) {
   const t = termInfo(settings, offset);
-  return `AY ${t.year}–${t.year + 1} · Semester ${t.semester}`;
+  return `${t.semester === 1 ? '1st' : '2nd'} Semester ${t.year}–${t.year + 1}`;
 }
 export type PlanEntry = { code: string; reasons: string[]; eligible: boolean };
 export type TermEvaluation = {
@@ -199,9 +204,7 @@ export function evaluatePlan(data: RecordData, plan = data.plan) {
           );
         const missing = s.prerequisites.filter((p) => !completed.has(p));
         if (missing.length)
-          reasons.push(
-            `Prerequisite not satisfied. Requires: ${missing.map((p) => subjectLabel(subjects, p)).join('; ')}. Complete before term ${term.term + 1}.`,
-          );
+          reasons.push(`Missing prerequisite: ${missing.join(', ')}`);
         if (!s.offered.includes(termInfo(data.settings, term.term).semester))
           reasons.push('Not offered in this semester.');
         if (overLimit)
@@ -228,9 +231,7 @@ export function evaluatePlan(data: RecordData, plan = data.plan) {
               (c) => !completed.has(c) && !concurrent.has(c),
             );
           if (missing.length) {
-            entry.reasons.push(
-              `Corequisite not satisfied. Take ${missing.map((c) => subjectLabel(subjects, c)).join('; ')} together in a valid term or earlier.`,
-            );
+            entry.reasons.push(`Corequisite needed: ${missing.join(', ')}`);
             entry.eligible = false;
             changed = true;
           }

@@ -135,7 +135,21 @@ export function validateCurriculum(value: unknown): Curriculum {
         }
       : {}),
     source: c.source === 'sample' ? 'sample' : 'imported',
+    ...(c.prospectus !== undefined
+      ? { prospectus: validateProspectus(c.prospectus) }
+      : {}),
     subjects,
+  };
+}
+function validateProspectus(
+  value: unknown,
+): NonNullable<Curriculum['prospectus']> {
+  const source = object(value);
+  if (!['pdf-text', 'ocr', 'mixed'].includes(source.method as string))
+    throw new Error('Invalid extraction method.');
+  return {
+    filename: string(source.filename, 'Prospectus filename', 255),
+    method: source.method as 'pdf-text' | 'ocr' | 'mixed',
   };
 }
 export function parseCSV(text: string) {
@@ -204,9 +218,7 @@ export function importCurriculum(text: string, fileName: string): Curriculum {
       source: 'imported',
       subjects: parseCSV(text),
     });
-  throw new Error(
-    'Upload CSV or JSON. PDF/image OCR is not supported; use the CSV template to transcribe your prospectus.',
-  );
+  throw new Error('This structured import helper accepts CSV or JSON only.');
 }
 export function validateRecord(value: unknown): RecordData {
   const r = object(value),
@@ -235,7 +247,24 @@ export function validateRecord(value: unknown): RecordData {
   });
   if (typeof settings.assumeCurrentPass !== 'boolean')
     throw new Error('Select the current-subject assumption.');
+  if (r.setupComplete !== undefined && typeof r.setupComplete !== 'boolean')
+    throw new Error('Invalid setup state.');
+  if (
+    r.setupComplete === false &&
+    (plan.length || Object.keys(statuses).length)
+  )
+    throw new Error('Finish curriculum setup before adding statuses or plans.');
+  if (
+    r.setupComplete === true &&
+    [...codes].some((c) => !Object.hasOwn(statuses, c))
+  )
+    throw new Error(
+      'Review a status for every subject before finishing setup.',
+    );
   return {
+    ...(r.setupComplete !== undefined
+      ? { setupComplete: r.setupComplete as boolean }
+      : {}),
     ...(r.profile !== undefined
       ? {
           profile: {

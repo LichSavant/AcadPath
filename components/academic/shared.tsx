@@ -108,25 +108,15 @@ export function SubjectCard({
       className={'subject-card ' + state + (highlight ? ' related' : '')}
       onClick={() => onSelect(subject)}
     >
-      <div className="row">
-        <strong>{subject.code}</strong>
-        <span className="muted">{subject.units} units</span>
-      </div>
+      <strong>{subject.code}</strong>
       <p>{subject.name}</p>
+      <span className="muted">{subject.units} units</span>
       <div className="row">
         <Pill status={state} />
         {statusOf(data.statuses, subject.code) === 'failed' && (
           <span className="failed-text">Retake</span>
         )}
       </div>
-      <small>
-        {subject.prerequisites.length
-          ? 'Requires ' + subject.prerequisites.join(' + ')
-          : 'No prerequisites'}
-        {subject.corequisites.length
-          ? ' · Co: ' + subject.corequisites.join(', ')
-          : ''}
-      </small>
     </button>
   );
 }

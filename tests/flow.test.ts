@@ -68,6 +68,30 @@ void test('HTTP flow: auth → import → mark → save → reload → plan → 
     plan: [],
   };
   try {
+    const confirmed = await request('PUT', {
+      data: { ...data, statuses: {}, setupComplete: false },
+      revision,
+    });
+    assert.equal(confirmed.res.status, 200);
+    revision = confirmed.value.revision;
+    const setupReload = await request('GET');
+    assert.equal(setupReload.value.data?.setupComplete, false);
+    assert.deepEqual(setupReload.value.data?.statuses, {});
+    const premature = await request('PUT', {
+      data: { ...data, setupComplete: true },
+      revision,
+    });
+    assert.equal(premature.res.status, 400);
+    data = {
+      ...data,
+      setupComplete: true,
+      statuses: Object.fromEntries(
+        data.curriculum.subjects.map((s) => [
+          s.code,
+          data.statuses[s.code] ?? 'remaining',
+        ]),
+      ),
+    };
     const saved = await request('PUT', { data, revision });
     assert.equal(saved.res.status, 200);
     revision = saved.value.revision;

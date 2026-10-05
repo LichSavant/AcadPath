@@ -1,10 +1,10 @@
-﻿# AcadPath
+# AcadPath
 
-A prerequisite-aware academic pathway planner for University of San Carlos (USC), Cebu students. Built on the existing Sites Vinext/React, TypeScript, and Cloudflare D1 architecture. The USC-inspired green, white, and restrained gold interface uses text branding and a generic academic icon; no official logo or institutional curriculum is implied.
+A USC-themed academic pathway planner built on the existing Vinext/React, TypeScript, and Cloudflare D1 architecture. Uses text branding and a generic academic icon, without official university assets.
 
-## Run locally
+## Run
 
-Requires Node.js 24 (the test runner uses native TypeScript support) and npm. In Windows PowerShell, use `npm.cmd` / `npx.cmd` if script execution is disabled.
+Requires Node.js 24 and npm. In Windows PowerShell:
 
 ```powershell
 npm.cmd ci
@@ -12,93 +12,65 @@ npm.cmd run db:migrate
 npm.cmd run dev
 ```
 
-Open the Local URL printed by the server (normally http://localhost:3000). The local sign-in creates one development-only profile, Seedy. The Sites development plugin handles this identity only for loopback requests. It is not a production password system.
+The dev/build commands prepare local PDF and OCR worker assets automatically. Open the server's Local URL, normally http://localhost:3000. Local development uses one development identity; new databases start without a curriculum. Production authentication remains the existing Sites/ChatGPT integration. Host behind Sites, which owns trusted identity headers and sign-in routes.
 
-Production sign-in uses ChatGPT through the Sites dispatcher; production records are scoped to its stable user ID. Host behind Sites, which owns the trusted identity headers and sign-in/sign-out routes. Do not expose the raw Worker as a standalone public authentication service.
+No new database migration is required for this update. Existing records remain compatible. `db:migrate` applies the existing schema to a fresh local database.
 
-## Checks
+## Student flow
+
+1. A new account sees only the setup invitation.
+2. Choose a PDF, PNG, JPG, or JPEG prospectus. Replace/remove the file or cancel processing at any time.
+3. Review real extracted rows. Correct code, name, units, prerequisites, year, and semester; add missing rows or remove unwanted ones. Source text and optional corequisites are available per row.
+4. Confirm the reviewed curriculum. This persists the curriculum with setup incomplete, without assumed progress or plans.
+5. Review completed, currently taking, remaining, and failed statuses, then save. Only then do the dashboard, map, planner, and simulator become available.
+6. Plan semesters using real prerequisites and explicit planning assumptions. Simulations never save changes to the real record.
+
+Replacing an existing curriculum requires confirmation and resets its statuses and plan. The selected file and extracted text stay in the browser; only the confirmed structured curriculum and filename/extraction method are saved.
+
+## Extraction
+
+PDF.js reads PDF text. Tesseract performs English OCR for images and scanned PDF pages. Worker code and language data are served locally from generated `public/extraction/` assets; no document is sent to an OCR service and no API key is required.
+
+Limits: 20 MB, 20 PDF pages, 25-megapixel images, and 300 subjects. Row recognition is conservative and heuristic. Uncertain values remain blank and must be corrected. Unrecognized documents show an empty review, never substitute subjects. Complex or side-by-side tables, low-resolution scans, unusual course codes, and wrapped cells may require manual reconstruction. Password-protected PDFs require an unlocked copy.
+
+Review is mandatory: OCR and document layout recognition are fallible. Prerequisites use all-of semantics. Offered semesters follow the reviewed semester; alternate offerings cannot currently be edited through the review screen. Legacy CSV/JSON validation remains for existing tests/data compatibility but is no longer the student upload flow.
+
+## Academic model and persistence
+
+`lib/academic.ts` owns prerequisites, eligibility, blockers, progress, planning, graduation projections, and simulation. `lib/import.ts` validates confirmed curricula and saved records. `lib/prospectus.ts` parses source rows without UI dependencies; `lib/extract-prospectus.ts` handles browser PDF/OCR processing.
+
+The D1 `student_records` table stores each authenticated student's validated document atomically with revision checks. Setup state is stored in the same document. No academic records are stored in browser storage. Existing records without a setup flag remain available.
+
+Only completed subjects satisfy prerequisites today. Current subjects count toward future projections only when the student enables the pass assumption. Corequisites require completed or concurrent enrollment. Both UI and API reject conflicting new plans/settings; grade changes can retain an existing plan with visible conflicts. Invalid saved plans suppress graduation estimates.
+
+## Verify
 
 ```powershell
 npm.cmd test
 npm.cmd run typecheck
 npm.cmd run lint
 npm.cmd run build
-# With the development server running and the local migration applied:
+# With the local development server running:
 npm.cmd run test:flow
 ```
 
-The 28 academic tests cover eligibility, all-of prerequisites, chains, failed grades, progress, unit limits, offerings, corequisites, invalid plans, CSV/JSON errors, forecast delays, simulation isolation, invalid concurrent chains, saved-plan projections, profile validation, and future retakes. The HTTP flow checks sign-in, import, mark/save, reload, planning, scenario isolation, stale revision rejection, invalid input, conflicting plan rejection, retained grade-induced conflicts, profile persistence, cross-origin rejection, and server-rendered workspace output. It restores an existing local record; on a fresh database it leaves the test fixture. Run it against the local development profile only.
+Unit tests cover academic rules, parsing, incomplete extraction, file limits, setup state, and simulation isolation. HTTP tests cover confirmation, status completion, persistence, revisions, planning, validation, and authentication. They restore an existing record; a fresh test database retains its test fixture.
 
-Lint targets application-owned code; the generated shadcn catalog is retained unchanged. The optional WebMCP read tool requires a browser exposing `document.modelContext`.
+Use a separate local D1 store for verification to preserve your development record:
 
-## Student flow
-
-1. Sign in and import a CSV/JSON curriculum, or choose the clearly labeled sample.
-2. Review/edit names, units, year/semester, prerequisites, corequisites, and offerings. Mark completed, current, remaining, or failed subjects.
-3. Save the review. Dashboard statistics and the curriculum map derive from this saved record.
-4. Set the first future term and unit limit. Explicitly choose whether to assume current subjects pass.
-5. Generate a suggested plan or arrange subjects manually. Missing prerequisites, corequisites, duplicate enrollment, unavailable offerings, and excessive loads are shown; a conflicting draft plan cannot be saved from the planner.
-6. Explore fail, pass, delay, move, add, or remove scenarios. Simulator state never calls the save API. A failed future attempt postpones its retake; removing a planned subject defers it without waiving its required units.
-7. Set your preferred name, academic program, and curriculum edition in Profile / Settings.
-
-A new curriculum replaces the previous curriculum, statuses, and plan only when its review is saved. Both the planner and API reject new conflicting plan/settings edits. Grade or curriculum updates may make an unchanged existing plan invalid; those warnings remain visible rather than silently discarding the real record change.
-
-## Import format
-
-Download `public/curriculum-template.csv` from the upload screen. Required columns:
-
-`code,name,units,year,semester`
-
-Optional columns:
-
-`prerequisites,corequisites,offered`
-
-Use semicolons between requirement codes and between offered semesters. Codes are case-insensitive and normalized to uppercase. CSV supports quoted fields, escaped quotes, CRLF, and UTF-8 BOMs. JSON accepts:
-
-```json
-{
-  "name": "My degree",
-  "subjects": [
-    {"code":"CS101","name":"Programming","units":3,"year":1,"semester":1,"prerequisites":[],"corequisites":[],"offered":[1,2]},
-    {"code":"CS102","name":"Advanced Programming","units":3,"year":1,"semester":2,"prerequisites":["CS101"],"corequisites":[],"offered":[2]}
-  ]
-}
+```powershell
+npx.cmd wrangler d1 migrations apply DB --local --config wrangler.local.json --persist-to .wrangler/prospectus-verification
+$env:ACADPATH_TEST_STATE='.wrangler/prospectus-verification'
+npm.cmd run dev
+# Run test:flow in a second terminal.
 ```
 
-Limits: 1 MB, 300 subjects, year levels 1–8, semesters 1–2, 0–30 units per subject. Missing requirement references, duplicate codes, self requirements, and prerequisite cycles are rejected. A missing offered field means the listed semester only. PDF/image/Word parsing is deliberately unsupported; transcribe these into the template.
+Clear `ACADPATH_TEST_STATE` before returning to your normal local database. Browser verification targets desktop: 1440x900, 1366x768, and 1920x1080. No mobile optimization is included.
 
-## Model and academic rules
+## Limitations
 
-- **Student**: server-authenticated user ID and display name.
-- **Curriculum**: name, optional program and curriculum year, source (`sample` or `imported`), subjects.
-- **Profile**: optional preferred student name, stored in the same validated record.
-- **Subject**: unique code, name, units, recommended year/semester, offered semesters.
-- **Relationships**: prerequisite and corequisite code arrays validated against the curriculum.
-- **Academic record**: per-subject status; omitted status means remaining.
-- **Semester plan**: zero-based future-term offsets and subject codes.
-- **Settings**: first future academic year/semester, unit cap, current-pass assumption.
-
-`student_records` stores each student's validated document atomically, plus revision and update time. This compact document model avoids partially replacing a curriculum without its statuses/plan. Queries use prepared statements and the authenticated primary key. Revision checks reject stale writes. No academic data is persisted in browser storage.
-
-Prerequisites require **completed** status. Current subjects never affect eligibility today. Future projections can assume they pass only through the explicit setting. Corequisites must be completed or concurrently planned. Recommended year level is informational; actual term offerings constrain scheduling. Academic years have two regular semesters.
-
-`lib/academic.ts` owns eligibility, summaries, chains, plan validation, term labels, forecasting, and simulation. `lib/import.ts` owns file and API validation. UI pages reuse these functions.
-
-The profile and curriculum context fields are optional additions to the existing JSON record. Existing records remain compatible; no new database migration is required.
-
-## Migrations and deployment
-
-Schema: `db/schema.ts`. To extend it, run `npm.cmd run db:generate`, inspect the generated migration, then `npm.cmd run db:migrate` locally. Retain applied migrations and metadata. Sites applies packaged migrations to its production D1 database during deployment. Local and hosted databases are separate.
-
-`.openai/hosting.json` identifies the private Sites project and the logical D1 binding. No production credentials are stored in this repository.
-
-## Scope and limitations
-
-- Two-semester calendars only; no summer terms, irregular offering dates, section capacity, grade thresholds, alternative/OR prerequisites, residency rules, or institutional overrides.
-- The automatic scheduler is a deterministic heuristic with a 24-term horizon, not an optimal graduation guarantee. It assumes future passes and repeats reviewed semester offerings annually.
-- Dashboard and simulator projections retain valid saved placements and fill remaining terms with the automatic scheduler. Invalid saved plans suppress graduation estimates until resolved.
-- Simulation compares one change at a time and is never saved. It does not change the real grade record or existing plan.
-- Local authentication is a development identity; production accounts require Sites/ChatGPT sign-in.
-- CSV/JSON parsing is real. Unstructured document OCR is not implemented.
-- Browser verification covered desktop dashboard/map/planner/simulator, subject details, status editing with saved recalculation, disabled invalid-plan saving, a 390px mobile viewport with no horizontal overflow, and mobile navigation. The original local fixture status was restored after the check.
-
+- Two regular semesters only: no summer calendar, section capacity, grade thresholds, OR prerequisites, residency rules, or institutional overrides.
+- Graduation estimates use a deterministic scheduler with a 24-term horizon and assumed future passes, not guaranteed enrollment dates.
+- Simulation compares one scenario at a time and cannot be applied to the real record.
+- Complex prospectus layouts may need manual corrections; extraction is not official curriculum verification.
+- Hosted authentication continues to require the existing Sites integration.

@@ -168,30 +168,25 @@ export function Planner({
           Assume current subjects pass before this future semester
         </label>
         <p className="muted">
-          Prerequisites must be passed earlier. Corequisites may be taken
-          together. Future passes and reviewed term offerings are assumed.
+          Prerequisites come first; corequisites can be taken together.
         </p>
       </section>
       <div className="action-bar">
         <div>
           <strong>{used.size} planned subjects</strong>
-          <span className="muted">
-            {' '}
-            · {totalUnits} units · Unsaved changes stay in this workspace until
-            you save
-          </span>
+          <span className="muted"> · {totalUnits} units</span>
         </div>
         <div className="row">
           <Button variant="outline" onClick={generate} disabled={busy}>
             <WandSparkles />
-            Generate suggested plan
+            Suggest Plan
           </Button>
           <Button
             onClick={() => void commit()}
             disabled={busy || evaluation.warnings.length > 0}
           >
             <Save />
-            {busy ? 'Saving…' : 'Save plan & settings'}
+            {busy ? 'Saving…' : 'Save Plan'}
           </Button>
         </div>
       </div>
@@ -208,8 +203,7 @@ export function Planner({
       )}
       <Notice>
         Expected graduation:{' '}
-        <strong>{graduationLabel(draft, projection.graduation)}</strong>. Valid
-        saved placements are kept; unscheduled subjects fill future terms.{' '}
+        <strong>{graduationLabel(draft, projection.graduation)}</strong>.{' '}
         {projection.unresolved.length > 0 && (
           <span>
             Unresolved within 24 terms: {projection.unresolved.join(', ')}.
@@ -248,9 +242,7 @@ export function Planner({
                     onClick={() => setActiveTerm(term)}
                     aria-pressed={activeTerm === term}
                   >
-                    {activeTerm === term
-                      ? 'Selecting subjects'
-                      : 'Add subjects'}
+                    {activeTerm === term ? 'Adding Subjects' : 'Add Subject'}
                   </Button>
                 </header>
                 {planned.length ? (
@@ -316,17 +308,11 @@ export function Planner({
                     })}
                   </div>
                 ) : (
-                  <p className="muted empty-term">
-                    No subjects planned. Select this semester and choose from
-                    the candidate list.
-                  </p>
+                  <p className="muted empty-term">No subjects planned.</p>
                 )}
                 <footer className="term-footer">
                   <div className="row">
-                    <strong>
-                      {termEvaluation?.units ?? 0} / {draft.settings.maxUnits}{' '}
-                      units
-                    </strong>
+                    <strong>{termEvaluation?.units ?? 0} units total</strong>
                     <span>{progress.progress}% projected completion</span>
                   </div>
                   <Progress
@@ -335,8 +321,7 @@ export function Planner({
                   />
                   <small>
                     {progress.completedUnits} completed units ·{' '}
-                    {progress.remainingUnits} remaining after valid subjects
-                    pass
+                    {progress.remainingUnits} remaining
                   </small>
                 </footer>
               </section>
@@ -402,9 +387,7 @@ export function Planner({
                       )
                     }
                   >
-                    {coreqOnly
-                      ? 'Add; corequisite still needed'
-                      : 'Add to semester'}{' '}
+                    {coreqOnly ? 'Add with Corequisite' : 'Add to semester'}{' '}
                     <Plus size={14} />
                   </Button>
                 </article>
@@ -413,14 +396,10 @@ export function Planner({
           </div>
           {!candidates.length && (
             <Blank title="No matching candidates">
-              Try another filter or term. Completed, current, and already
-              planned subjects are excluded.
+              Try another filter or semester.
             </Blank>
           )}
-          <p className="muted">
-            Corequisite drafts show warnings until the partner is added. Invalid
-            plans cannot be saved.
-          </p>
+          <p className="muted">Add corequisites together before saving.</p>
         </aside>
       </div>
     </div>
@@ -476,10 +455,7 @@ export function Simulator({ data }: { data: RecordData }) {
         <FlaskConical />
         <div>
           <strong>Simulation Mode</strong>
-          <p>
-            Your real academic record and saved plan stay unchanged. Explore one
-            change at a time.
-          </p>
+          <p>Explore a change without changing your record.</p>
         </div>
         <Button
           variant="outline"
@@ -537,18 +513,17 @@ export function Simulator({ data }: { data: RecordData }) {
         )}
       </section>
       {action === 'remove' && (
-        <Notice>
-          Removing a required subject postpones it until a later feasible
-          offering; it does not remove its units from your degree requirements.
-        </Notice>
+        <Notice>Removed subjects move to a later offering.</Notice>
       )}
       {!scenario ? (
         <Blank title="No subjects available for this scenario">
-          Passing requires a current subject. Adding requires an unplanned
-          subject; removing requires a subject in the current path.
+          Choose another action.
         </Blank>
       ) : (
         <>
+          <p className="comparison-label">
+            Current Path <ArrowRight size={16} /> Simulated Path
+          </p>
           <div className="comparison-grid">
             {[
               {
@@ -585,9 +560,9 @@ export function Simulator({ data }: { data: RecordData }) {
                 {i === 1 && (
                   <p className="muted">
                     {delay === null
-                      ? 'Estimate unavailable while scheduling constraints remain unresolved.'
+                      ? 'Resolve scheduling conflicts for an estimate.'
                       : delay === 0
-                        ? 'No projected graduation shift.'
+                        ? 'No graduation change.'
                         : Math.abs(delay) +
                           ' semester(s) ' +
                           (delay > 0 ? 'later' : 'earlier') +
@@ -600,17 +575,13 @@ export function Simulator({ data }: { data: RecordData }) {
           {scenario.forecast.unresolved.length > 0 && (
             <Notice tone="warning">
               Unresolved: {scenario.forecast.unresolved.join(', ')}. Check
-              prerequisites, offerings, current outcomes, the unit limit, or the
-              selected target semester.
+              requirements and offerings.
             </Notice>
           )}
           <div className="two-columns">
             <section className="panel">
-              <h2>Affected prerequisite relationships</h2>
-              <p className="muted">
-                The changed subject and its downstream chain are rescheduled.
-                Other saved placements are retained.
-              </p>
+              <h2>Affected Subjects</h2>
+              <p className="muted">Dependent subjects are rescheduled.</p>
               <div className="edge-list">
                 {prerequisiteEdges(data.curriculum.subjects, chosen).map(
                   (e) => (
@@ -639,20 +610,14 @@ export function Simulator({ data }: { data: RecordData }) {
                 </div>
               ))}
               {!eligibilityChanges.length && (
-                <p className="muted">
-                  No change to eligibility today. Future semester placements may
-                  still change.
-                </p>
+                <p className="muted">No eligibility changes today.</p>
               )}
-              <p className="muted">
-                Scheduling a subject does not count it as passed today.
-              </p>
+              <p className="muted"></p>
             </section>
           </div>
           <section className="panel">
             <div className="section-heading">
-              <h2>Recalculated semester plan</h2>
-              <span className="muted">Projected after each valid semester</span>
+              <h2>Simulated Plan</h2>
             </div>
             <div className="simulation-terms">
               {scenario.forecast.plan.map((t) => {
