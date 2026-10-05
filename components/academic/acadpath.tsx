@@ -45,7 +45,14 @@ import type { ProspectusDraft } from '@/lib/prospectus';
 import { Dashboard, CurriculumMap } from './overview';
 import { UploadView, ReviewView, ProfileSettings } from './import-review';
 import { Planner, Simulator } from './planning';
-import { Pill, Notice, Blank } from './shared';
+import {
+  Pill,
+  Notice,
+  Blank,
+  CourseCode,
+  DependencyTree,
+  RequirementIndicator,
+} from './shared';
 
 const pages = [
   ['dashboard', 'Dashboard', LayoutDashboard],
@@ -249,6 +256,11 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
                     isActive={
                       page === id || (id === 'review' && page === 'upload')
                     }
+                    aria-current={
+                      page === id || (id === 'review' && page === 'upload')
+                        ? 'page'
+                        : undefined
+                    }
                     onClick={() => navigate(id)}
                     disabled={
                       busy ||
@@ -268,6 +280,7 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
           <SidebarMenuButton
             className="nav-button"
             isActive={page === 'settings'}
+            aria-current={page === 'settings' ? 'page' : undefined}
             onClick={() => navigate('settings')}
             disabled={busy || !data}
           >
@@ -300,7 +313,9 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
               ? ` · Curriculum ${data.curriculum.curriculumYear}`
               : ''}
           </span>
-          {busy && <output className="save-state">Saving...</output>}
+          {(busy || message === 'Saved.') && (
+            <output className="save-state">{busy ? 'Saving…' : 'Saved'}</output>
+          )}
         </header>
         <div className="page-content">
           <div className="page-title">
@@ -331,7 +346,9 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
               )}
             </Notice>
           )}
-          {message && <Notice tone="success">{message}</Notice>}
+          {message && message !== 'Saved.' && (
+            <Notice tone="success">{message}</Notice>
+          )}
           {loading ? (
             <div
               className="stack"
@@ -474,19 +491,7 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
                 <h3>Corequisites</h3>
                 <RequirementList codes={selected.corequisites} data={data} />
                 <h3>Unlocks</h3>
-                <ul className="unlock-list">
-                  {unlocks.map((s) => (
-                    <li key={s.code}>
-                      <button
-                        className="subject-link"
-                        onClick={() => setSelected(s)}
-                      >
-                        <strong>{s.code}</strong>
-                        <span>{s.name}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                <DependencyTree subjects={unlocks} onSelect={setSelected} />
                 {!unlocks.length && <p className="muted">No courses.</p>}
                 <h3>Offered in</h3>
                 <p>
@@ -511,7 +516,8 @@ function RequirementList({
     <ul className="requirements">
       {codes.map((c) => (
         <li key={c}>
-          <strong>{c}</strong>
+          <RequirementIndicator satisfied={data.statuses[c] === 'completed'} />
+          <CourseCode code={c} />
           <Pill status={data.statuses[c] ?? 'remaining'} />
         </li>
       ))}

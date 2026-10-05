@@ -32,7 +32,8 @@ import {
 } from '@/lib/academic';
 import {
   SubjectCard,
-  CourseCode,
+  CourseRow,
+  DependencyTree,
   Pill,
   Blank,
   Choice,
@@ -73,7 +74,7 @@ export function Dashboard({
       >
         <div className="hero-heading">
           <div>
-            <p className="eyebrow">YOUR PATH</p>
+            <p className="eyebrow">YOUR ACADEMIC PATH</p>
             <h2 id="progress-heading">Academic Progress</h2>
           </div>
           <Route className="path-icon" aria-hidden="true" />
@@ -109,7 +110,7 @@ export function Dashboard({
               {stats.remainingUnits} <span>units</span>
             </dd>
           </div>
-          <div>
+          <div className="graduation-metric">
             <dt>
               <GraduationCap aria-hidden="true" />
               Est. Graduation
@@ -140,25 +141,37 @@ export function Dashboard({
           {stats.eligible.length ? (
             <div className="eligible-list">
               {stats.eligible.slice(0, 4).map((s) => (
-                <button
-                  className="list-row"
+                <CourseRow
                   key={s.code}
-                  onClick={() => select(s)}
-                >
-                  <div>
-                    <CourseCode code={s.code} />
-                    <p>{s.name}</p>
-                  </div>
-                  <span>{s.units} units</span>
-                </button>
+                  subject={s}
+                  onSelect={select}
+                  detail={
+                    s.prerequisites.length || s.corequisites.length
+                      ? 'Requirements complete'
+                      : 'No prerequisites required'
+                  }
+                />
               ))}
             </div>
           ) : (
-            <p className="section-empty">
+            <Blank
+              title={
+                stats.remaining
+                  ? 'No subjects eligible yet'
+                  : 'Curriculum complete'
+              }
+              action={
+                stats.remaining ? (
+                  <Button variant="outline" onClick={() => navigate('map')}>
+                    Review requirements
+                  </Button>
+                ) : undefined
+              }
+            >
               {stats.remaining
-                ? 'No subjects eligible yet.'
-                : 'Curriculum complete.'}
-            </p>
+                ? 'Follow your prerequisite path to see your next options.'
+                : 'All curriculum units are completed.'}
+            </Blank>
           )}
           {stats.eligible.length > 4 && (
             <Button variant="ghost" onClick={() => navigate('map')}>
@@ -193,17 +206,14 @@ export function Dashboard({
                   &middot; blocks {downstream.length}{' '}
                   {downstream.length === 1 ? 'subject' : 'subjects'}
                 </p>
-                <ul className="blocker-targets">
-                  {data.curriculum.subjects
-                    .filter(
-                      (target) =>
-                        target.prerequisites.includes(s.code) &&
-                        statusOf(data.statuses, target.code) !== 'completed',
-                    )
-                    .map((target) => (
-                      <li key={target.code}>{target.name}</li>
-                    ))}
-                </ul>
+                <DependencyTree
+                  onSelect={select}
+                  subjects={data.curriculum.subjects.filter(
+                    (target) =>
+                      target.prerequisites.includes(s.code) &&
+                      statusOf(data.statuses, target.code) !== 'completed',
+                  )}
+                />
               </article>
             ))}
           </section>
@@ -215,7 +225,7 @@ export function Dashboard({
           <section className="timeline-stop">
             <div className="timeline-marker">
               <span aria-hidden="true" />
-              NOW
+              CURRENT
             </div>
             <div className="section-surface">
               <div className="section-heading">
@@ -224,6 +234,12 @@ export function Dashboard({
                   Update Statuses
                 </Button>
               </div>
+              <p className="semester-summary">
+                <strong>
+                  {stats.current.reduce((n, s) => n + s.units, 0)}
+                </strong>{' '}
+                units <span>· {stats.current.length} subjects</span>
+              </p>
               {stats.current.length ? (
                 <Table>
                   <TableHeader>
@@ -254,7 +270,19 @@ export function Dashboard({
                   </TableBody>
                 </Table>
               ) : (
-                <p className="section-empty">No current subjects marked.</p>
+                <Blank
+                  title="No current subjects marked"
+                  action={
+                    <Button
+                      variant="outline"
+                      onClick={() => navigate('review')}
+                    >
+                      Update statuses
+                    </Button>
+                  }
+                >
+                  Mark the subjects you are taking this semester.
+                </Blank>
               )}
             </div>
           </section>
@@ -273,38 +301,42 @@ export function Dashboard({
               </div>
               {next ? (
                 <>
+                  <p className="semester-summary">
+                    <strong>
+                      {next.codes.reduce(
+                        (n, code) =>
+                          n +
+                          (data.curriculum.subjects.find((s) => s.code === code)
+                            ?.units ?? 0),
+                        0,
+                      )}
+                    </strong>{' '}
+                    units <span>· {next.codes.length} subjects</span>
+                  </p>
                   <h3>{termLabel(data.settings, next.term)}</h3>
                   {next.codes.map((code) => {
                     const s = data.curriculum.subjects.find(
                       (s) => s.code === code,
                     )!;
                     return (
-                      <button
-                        className="list-row"
-                        key={code}
-                        onClick={() => select(s)}
-                      >
-                        <div>
-                          <CourseCode code={s.code} />
-                          <p>{s.name}</p>
-                        </div>
-                        <span>{s.units} units</span>
-                      </button>
+                      <CourseRow key={code} subject={s} onSelect={select} />
                     );
                   })}
-                  <p className="term-total">
-                    {next.codes.reduce(
-                      (n, code) =>
-                        n +
-                        (data.curriculum.subjects.find((s) => s.code === code)
-                          ?.units ?? 0),
-                      0,
-                    )}{' '}
-                    units total
-                  </p>
                 </>
               ) : (
-                <p className="section-empty">No semester planned yet.</p>
+                <Blank
+                  title="No semester planned yet"
+                  action={
+                    <Button
+                      variant="outline"
+                      onClick={() => navigate('planner')}
+                    >
+                      Plan Semester
+                    </Button>
+                  }
+                >
+                  Choose eligible subjects to build your next semester.
+                </Blank>
               )}
             </div>
           </section>
@@ -429,6 +461,11 @@ export function CurriculumMap({
                               onSelect={select}
                               highlight={
                                 s.code === focus || related.includes(s.code)
+                              }
+                              muted={
+                                !!focus &&
+                                s.code !== focus &&
+                                !related.includes(s.code)
                               }
                             />
                           ))}

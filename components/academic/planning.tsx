@@ -31,7 +31,14 @@ import {
   type Scenario,
 } from '@/lib/academic';
 import { validateRecord } from '@/lib/import';
-import { Choice, Notice, Blank, Pill } from './shared';
+import {
+  Choice,
+  Notice,
+  Blank,
+  Pill,
+  CourseCode,
+  ComparisonMetric,
+} from './shared';
 
 export function Planner({
   data,
@@ -168,10 +175,16 @@ export function Planner({
           Assume current subjects pass before this future semester
         </label>
       </section>
-      <div className="action-bar">
+      <div className="action-bar soft-panel planning-summary">
         <div>
-          <strong>{used.size} planned subjects</strong>
-          <span className="muted"> · {totalUnits} units</span>
+          <p className="eyebrow">PLANNING</p>
+          <strong className="unit-total">
+            {totalUnits} <span>units planned</span>
+          </strong>
+          <p className="muted">
+            {used.size} subjects ·{' '}
+            {draft.plan.filter((t) => t.codes.length).length} semesters
+          </p>
         </div>
         <div className="row">
           <Button variant="outline" onClick={generate} disabled={busy}>
@@ -209,6 +222,7 @@ export function Planner({
       </Notice>
       <div className="planning-layout">
         <div className="planner-timeline">
+          <p className="eyebrow">PLANNED SEMESTERS</p>
           {Array.from({ length: termCount }, (_, term) => {
             const planned =
               draft.plan.find((t) => t.term === term)?.codes ?? [];
@@ -224,7 +238,7 @@ export function Planner({
             return (
               <section
                 className={
-                  'panel planned-term' +
+                  'soft-panel planned-term' +
                   (activeTerm === term ? ' active-term' : '')
                 }
                 key={term}
@@ -254,7 +268,7 @@ export function Planner({
                       return (
                         <div className="planned-subject" key={code}>
                           <div className="planned-subject-info">
-                            <strong>{s.code}</strong>
+                            <CourseCode code={s.code} />
                             <p>{s.name}</p>
                             <span className="muted">{s.units} units</span>{' '}
                             <Pill
@@ -305,11 +319,18 @@ export function Planner({
                     })}
                   </div>
                 ) : (
-                  <p className="muted empty-term">No subjects planned.</p>
+                  <Blank title="Ready to build this semester">
+                    {activeTerm === term
+                      ? 'Add subjects from the available list.'
+                      : 'Select Add Subject to plan this semester.'}
+                  </Blank>
                 )}
                 <footer className="term-footer">
                   <div className="row">
-                    <strong>{termEvaluation?.units ?? 0} units total</strong>
+                    <strong className="unit-total">
+                      {termEvaluation?.units ?? 0}{' '}
+                      <span>/ {draft.settings.maxUnits} units</span>
+                    </strong>
                     <span>{progress.progress}% projected completion</span>
                   </div>
                   <Progress
@@ -337,9 +358,9 @@ export function Planner({
             </Button>
           )}
         </div>
-        <aside className="panel candidate-panel">
-          <p className="eyebrow">ADD SUBJECTS</p>
-          <h2>Term {activeTerm + 1}</h2>
+        <aside className="soft-panel candidate-panel">
+          <p className="eyebrow">AVAILABLE SUBJECTS</p>
+          <h2>Add to Term {activeTerm + 1}</h2>
           <p className="muted">{termLabel(draft.settings, activeTerm)}</p>
           <Input
             aria-label="Search candidate subjects"
@@ -364,7 +385,7 @@ export function Planner({
               return (
                 <article className="candidate" key={s.code}>
                   <div className="row">
-                    <strong>{s.code}</strong>
+                    <CourseCode code={s.code} />
                     <span>{s.units} units</span>
                   </div>
                   <p>{s.name}</p>
@@ -537,31 +558,52 @@ export function Simulator({ data }: { data: RecordData }) {
               },
             ].map((view, i) => (
               <section
-                className={'panel ' + (i ? 'scenario-result' : '')}
+                className={
+                  'soft-panel ' + (i ? 'scenario-result' : 'baseline-result')
+                }
                 key={view.title}
               >
                 <p className="eyebrow">{view.title}</p>
                 <span className="muted">Expected graduation</span>
-                <h2>{graduationLabel(view.record, view.result.graduation)}</h2>
+                <h2
+                  className={
+                    i && delay !== null && delay !== 0 ? 'changed-value' : ''
+                  }
+                >
+                  {graduationLabel(view.record, view.result.graduation)}
+                </h2>
                 <div className="comparison-stats">
-                  <span>
-                    <strong>{view.stats.eligible.length}</strong>can take next
-                  </span>
-                  <span>
-                    <strong>{view.stats.blocked.length}</strong>blocked now
-                  </span>
-                  <span>
-                    <strong>{view.stats.remainingUnits}</strong>remaining units
-                  </span>
+                  <ComparisonMetric
+                    value={view.stats.eligible.length}
+                    label="can take next"
+                    baseline={i ? baselineStats.eligible.length : undefined}
+                  />
+                  <ComparisonMetric
+                    value={view.stats.blocked.length}
+                    label="blocked now"
+                    baseline={i ? baselineStats.blocked.length : undefined}
+                  />
+                  <ComparisonMetric
+                    value={view.stats.remainingUnits}
+                    label="remaining units"
+                    baseline={i ? baselineStats.remainingUnits : undefined}
+                  />
                 </div>
                 {i === 1 && (
-                  <p className="muted">
+                  <p
+                    className={
+                      'scenario-impact ' +
+                      (delay !== null && delay !== 0 ? 'changed-value' : '')
+                    }
+                  >
                     {delay === null
                       ? 'Resolve scheduling conflicts for an estimate.'
                       : delay === 0
                         ? 'No graduation change.'
                         : Math.abs(delay) +
-                          ' semester(s) ' +
+                          (Math.abs(delay) === 1
+                            ? ' semester '
+                            : ' semesters ') +
                           (delay > 0 ? 'later' : 'earlier') +
                           ' than the current path.'}
                   </p>
@@ -597,7 +639,10 @@ export function Simulator({ data }: { data: RecordData }) {
               <h2>Eligibility changes</h2>
               {eligibilityChanges.map((s) => (
                 <div className="record-line" key={s.code}>
-                  <strong>{s.code}</strong>
+                  <div>
+                    <CourseCode code={s.code} />
+                    <p>{s.name}</p>
+                  </div>
                   <span>
                     {scenario.summary.eligible.some((e) => e.code === s.code)
                       ? 'Newly eligible'

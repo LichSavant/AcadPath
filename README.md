@@ -65,7 +65,7 @@ npm.cmd run dev
 # Run test:flow in a second terminal.
 ```
 
-Clear `ACADPATH_TEST_STATE` before returning to your normal local database. Browser verification targets desktop: 1440x900, 1366x768, and 1920x1080. No mobile optimization is included.
+Clear `ACADPATH_TEST_STATE` before returning to your normal local database. The frontend was visually reviewed at desktop (1440x1000), tablet (820x1000), and mobile (390x844) sizes. Wide curriculum tables scroll within their containers; the academic timeline stacks vertically on smaller screens. Browser checks cover prerequisite tracing, subject drawers, keyboard focus, reduced motion, mobile navigation, and page overflow.
 
 ## Limitations
 

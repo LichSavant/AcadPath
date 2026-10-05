@@ -1,5 +1,6 @@
 'use client';
 import type { ReactNode } from 'react';
+import { ArrowRight, BookOpen, Check, Circle } from 'lucide-react';
 import {
   Select,
   SelectTrigger,
@@ -78,37 +79,131 @@ export function Pill({ status }: { status: string }) {
 export function Blank({
   title,
   children,
+  action,
 }: {
   title: string;
   children?: ReactNode;
+  action?: ReactNode;
 }) {
   return (
     <Empty className="empty-state">
       <EmptyHeader>
+        <BookOpen className="empty-icon" aria-hidden="true" />
         <EmptyTitle>{title}</EmptyTitle>
-        <EmptyDescription>{children}</EmptyDescription>
+        {children && <EmptyDescription>{children}</EmptyDescription>}
       </EmptyHeader>
+      {action}
     </Empty>
   );
 }
 export function CourseCode({ code }: { code: string }) {
   return <strong className="course-code">{code}</strong>;
 }
+export function ComparisonMetric({
+  value,
+  label,
+  baseline,
+}: {
+  value: number;
+  label: string;
+  baseline?: number;
+}) {
+  const delta = baseline === undefined ? 0 : value - baseline;
+  return (
+    <span>
+      <strong className={delta ? 'changed-value' : undefined}>
+        {value}
+        {delta !== 0 && (
+          <small
+            aria-label={`${Math.abs(delta)} ${delta > 0 ? 'more' : 'fewer'} than current path`}
+          >
+            {delta > 0 ? '+' : ''}
+            {delta}
+          </small>
+        )}
+      </strong>
+      {label}
+    </span>
+  );
+}
+export function CourseRow({
+  subject,
+  onSelect,
+  detail,
+}: {
+  subject: Subject;
+  onSelect: (s: Subject) => void;
+  detail?: string;
+}) {
+  return (
+    <button className="list-row course-row" onClick={() => onSelect(subject)}>
+      <CourseCode code={subject.code} />
+      <span className="course-row-title">
+        <span>{subject.name}</span>
+        {detail && <small>{detail}</small>}
+      </span>
+      <span className="course-row-end">
+        {subject.units} units
+        <ArrowRight aria-hidden="true" />
+      </span>
+    </button>
+  );
+}
+export function DependencyTree({
+  subjects,
+  onSelect,
+}: {
+  subjects: Subject[];
+  onSelect: (s: Subject) => void;
+}) {
+  return (
+    <ul className="dependency-tree">
+      {subjects.map((s) => (
+        <li key={s.code}>
+          <button className="dependency-link" onClick={() => onSelect(s)}>
+            <span>{s.name}</span>
+            <small>{s.code}</small>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+export function RequirementIndicator({ satisfied }: { satisfied: boolean }) {
+  return satisfied ? (
+      <Check
+        className="requirement-indicator satisfied"
+      aria-label="Requirement satisfied"
+    />
+  ) : (
+      <Circle
+        className="requirement-indicator"
+      aria-label="Requirement not yet satisfied"
+    />
+  );
+}
 export function SubjectCard({
   subject,
   data,
   onSelect,
   highlight = false,
+  muted = false,
 }: {
   subject: Subject;
   data: RecordData;
   onSelect: (s: Subject) => void;
   highlight?: boolean;
+  muted?: boolean;
 }) {
   const state = academicState(subject, data.statuses);
   return (
     <button
-      className={'subject-card ' + state + (highlight ? ' related' : '')}
+      className={
+        'subject-card ' +
+        state +
+        (highlight ? ' related' : '') +
+        (muted ? ' trace-muted' : '')
+      }
       onClick={() => onSelect(subject)}
     >
       <CourseCode code={subject.code} />
