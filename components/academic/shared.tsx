@@ -171,13 +171,13 @@ export function DependencyTree({
 }
 export function RequirementIndicator({ satisfied }: { satisfied: boolean }) {
   return satisfied ? (
-      <Check
-        className="requirement-indicator satisfied"
+    <Check
+      className="requirement-indicator satisfied"
       aria-label="Requirement satisfied"
     />
   ) : (
-      <Circle
-        className="requirement-indicator"
+    <Circle
+      className="requirement-indicator"
       aria-label="Requirement not yet satisfied"
     />
   );
@@ -201,18 +201,22 @@ export function SubjectCard({
       className={
         'subject-card ' +
         state +
+        (statusOf(data.statuses, subject.code) === 'failed' ? ' failed' : '') +
         (highlight ? ' related' : '') +
         (muted ? ' trace-muted' : '')
       }
       onClick={() => onSelect(subject)}
     >
-      <CourseCode code={subject.code} />
+      <div className="card-code-row">
+        <CourseCode code={subject.code} />
+        {state === 'completed' && <Check aria-hidden="true" />}
+      </div>
       <p>{subject.name}</p>
       <span className="muted">{subject.units} units</span>
       <div className="row">
         <Pill status={state} />
         {statusOf(data.statuses, subject.code) === 'failed' && (
-          <span className="failed-text">Retake</span>
+          <span className="failed-text">Failed · retake</span>
         )}
       </div>
     </button>

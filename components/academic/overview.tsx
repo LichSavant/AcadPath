@@ -3,7 +3,6 @@ import { useMemo, useState } from 'react';
 import {
   ArrowUpRight,
   ArrowRight,
-  Route,
   BookOpen,
   GraduationCap,
 } from 'lucide-react';
@@ -25,14 +24,15 @@ import {
   termLabel,
   descendants,
   statusOf,
-  prerequisiteEdges,
   matchesSubject,
+  prerequisiteChain,
   type RecordData,
   type Subject,
 } from '@/lib/academic';
 import {
   SubjectCard,
   CourseRow,
+  CourseCode,
   DependencyTree,
   Pill,
   Blank,
@@ -62,7 +62,7 @@ export function Dashboard({
     }))
     .filter((b) => b.downstream.length)
     .sort((a, b) => b.downstream.length - a.downstream.length)
-    .slice(0, 3);
+    .slice(0, 2);
   const next = [...data.plan]
     .filter((t) => t.codes.length)
     .sort((a, b) => a.term - b.term)[0];
@@ -73,20 +73,46 @@ export function Dashboard({
         aria-labelledby="progress-heading"
       >
         <div className="hero-heading">
-          <div>
-            <p className="eyebrow">YOUR ACADEMIC PATH</p>
-            <h2 id="progress-heading">Academic Progress</h2>
-          </div>
-          <Route className="path-icon" aria-hidden="true" />
+          <h2 className="eyebrow" id="progress-heading">
+            YOUR ACADEMIC JOURNEY
+          </h2>
+          <span className="journey-context">
+            {stats.completed.length} / {data.curriculum.subjects.length}{' '}
+            subjects completed
+          </span>
         </div>
         <div className="progress-summary">
-          <div className="row">
-            <strong>
-              {stats.completedUnits} <span>/ {stats.totalUnits} units</span>
+          <div className="journey-value">
+            <strong className="progress-percentage">
+              {stats.progress}% <span>complete</span>
             </strong>
-            <span className="progress-percentage">{stats.progress}%</span>
+            <p className="journey-units">
+              <strong>{stats.completedUnits}</strong> / {stats.totalUnits} units
+            </p>
           </div>
-          <Progress value={stats.progress} aria-label="Academic progress" />
+          <div className="journey-track">
+            <Progress value={stats.progress} aria-label="Academic progress" />
+            <span
+              aria-hidden="true"
+              className={
+                'journey-marker' +
+                (stats.progress < 15
+                  ? ' at-start'
+                  : stats.progress > 85
+                    ? ' at-end'
+                    : '')
+              }
+              style={{
+                left: `clamp(7px, ${stats.progress}%, calc(100% - 7px))`,
+              }}
+            >
+              <span>You are here</span>
+            </span>
+          </div>
+          <div className="journey-endpoints" aria-hidden="true">
+            <span>Start</span>
+            <span>Graduation</span>
+          </div>
         </div>
         <dl className="progress-metrics">
           <div>
@@ -140,7 +166,7 @@ export function Dashboard({
           </div>
           {stats.eligible.length ? (
             <div className="eligible-list">
-              {stats.eligible.slice(0, 4).map((s) => (
+              {stats.eligible.slice(0, 5).map((s) => (
                 <CourseRow
                   key={s.code}
                   subject={s}
@@ -148,7 +174,7 @@ export function Dashboard({
                   detail={
                     s.prerequisites.length || s.corequisites.length
                       ? 'Requirements complete'
-                      : 'No prerequisites required'
+                      : undefined
                   }
                 />
               ))}
@@ -173,7 +199,7 @@ export function Dashboard({
                 : 'All curriculum units are completed.'}
             </Blank>
           )}
-          {stats.eligible.length > 4 && (
+          {stats.eligible.length > 5 && (
             <Button variant="ghost" onClick={() => navigate('map')}>
               View all {stats.eligible.length}
             </Button>
@@ -184,18 +210,25 @@ export function Dashboard({
             <div className="section-heading">
               <div>
                 <p className="eyebrow">PATH CHECKPOINTS</p>
-                <h2>Blockers</h2>
+                <h2>Blocking Your Path</h2>
               </div>
               <Button variant="ghost" onClick={() => navigate('map')}>
                 Course Map
               </Button>
             </div>
             {blockers.map(({ s, downstream }) => (
-              <article className="blocker" key={s.code}>
-                <button className="subject-link" onClick={() => select(s)}>
-                  <strong>
-                    {s.code} &middot; {s.name}
-                  </strong>
+              <article
+                className={
+                  'blocker' +
+                  (statusOf(data.statuses, s.code) === 'failed'
+                    ? ' failed'
+                    : '')
+                }
+                key={s.code}
+              >
+                <button className="blocker-heading" onClick={() => select(s)}>
+                  <CourseCode code={s.code} />
+                  <strong>{s.name}</strong>
                 </button>
                 <p className="muted">
                   {statusOf(data.statuses, s.code) === 'current'
@@ -220,7 +253,7 @@ export function Dashboard({
         )}
       </div>
       <div className="semester-timeline">
-        <p className="eyebrow">YOUR TIMELINE</p>
+        <p className="eyebrow">YOUR NEXT STEPS</p>
         <div className="two-columns semester-grid">
           <section className="timeline-stop">
             <div className="timeline-marker">
@@ -359,9 +392,26 @@ export function CurriculumMap({
     [filter, setFilter] = useState('all'),
     [focus, setFocus] = useState('');
   const related = useMemo(
-    () => (focus ? descendants(data.curriculum.subjects, focus) : []),
+    () =>
+      focus
+        ? [
+            ...prerequisiteChain(data.curriculum.subjects, focus),
+            ...descendants(data.curriculum.subjects, focus),
+          ]
+        : [],
     [data.curriculum.subjects, focus],
   );
+  const traceEdges = focus
+    ? data.curriculum.subjects.flatMap((s) =>
+        s.prerequisites
+          .filter(
+            (p) =>
+              (s.code === focus || related.includes(s.code)) &&
+              (p === focus || related.includes(p)),
+          )
+          .map((p) => ({ from: p, to: s.code })),
+      )
+    : [];
   const years = [...new Set(data.curriculum.subjects.map((s) => s.year))].sort(
     (a, b) => a - b,
   );
@@ -405,14 +455,19 @@ export function CurriculumMap({
       </div>
       {focus && (
         <Notice>
-          <strong>{focus}</strong> affects {related.length} downstream subjects.{' '}
+          <strong>{focus}</strong> ·{' '}
+          {prerequisiteChain(data.curriculum.subjects, focus).length}{' '}
+          prerequisites · {descendants(data.curriculum.subjects, focus).length}{' '}
+          downstream subjects.{' '}
           <button className="text-button" onClick={() => setFocus('')}>
             Clear trace
           </button>
           <div className="edge-list">
-            {prerequisiteEdges(data.curriculum.subjects, focus).map((e) => (
+            {traceEdges.map((e) => (
               <p key={e.from + e.to}>
-                {e.from} → {e.to}
+                <CourseCode code={e.from} />
+                <ArrowRight size={14} aria-hidden="true" />
+                <CourseCode code={e.to} />
               </p>
             ))}
           </div>

@@ -66,7 +66,7 @@ body {
 
 :root,
 .dark {
-  --background: #f6f8f6;
+  --background: #f5f8f5;
   --foreground: #202c26;
   --card: #ffffff;
   --card-foreground: #202c26;
@@ -447,13 +447,13 @@ small {
   gap: var(--space-4);
 }
 .hero-heading h2 {
-  font-size: 20px;
+  font-size: 11px;
+  font-weight: 600;
 }
-.hero-heading .path-icon {
-  width: 28px;
-  height: 28px;
-  color: #639777;
-  stroke-width: 1.5;
+.journey-context {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  text-align: right;
 }
 .eyebrow + h2 {
   margin-top: var(--space-1);
@@ -526,23 +526,78 @@ small {
   display: grid;
   gap: var(--space-3);
 }
-.progress-summary strong {
-  font-size: 38px;
-  line-height: 1.2;
-  color: var(--primary);
+.journey-value {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
 }
-.progress-summary strong span,
+.journey-value .progress-percentage {
+  font-size: 48px;
+  line-height: 1.2;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--deep-green);
+}
+.progress-percentage > span {
+  font-size: 16px;
+  letter-spacing: 0;
+  color: var(--muted-foreground);
+  font-weight: 400;
+}
+.journey-units {
+  font-size: 16px;
+  color: var(--muted-foreground);
+}
+.journey-units strong {
+  color: var(--deep-green);
+  font-weight: 600;
+}
+.journey-track {
+  position: relative;
+  margin-top: var(--space-6);
+}
+.journey-marker {
+  position: absolute;
+  top: -2px;
+  width: 14px;
+  height: 14px;
+  border: 3px solid white;
+  border-radius: 50%;
+  background: var(--milestone);
+  box-shadow: 0 0 0 1px #9a8541;
+  transform: translateX(-50%);
+}
+.journey-marker > span {
+  position: absolute;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--milestone-text);
+}
+.journey-marker.at-start > span {
+  left: 0;
+  transform: none;
+}
+.journey-marker.at-end > span {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+.journey-endpoints {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
 .progress-metrics dd span {
   font-size: 14px;
   font-weight: 400;
   color: var(--muted-foreground);
-}
-.progress-percentage {
-  font-size: 40px;
-  letter-spacing: -0.04em;
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  color: var(--primary);
 }
 .progress-metrics {
   display: grid;
@@ -767,6 +822,10 @@ small {
   width: 16px;
   height: 16px;
   color: var(--primary);
+  transition: transform 180ms ease;
+}
+.course-row:hover .course-row-end svg {
+  transform: translateX(2px);
 }
 .list-row strong {
   font-size: 13px;
@@ -809,6 +868,25 @@ small {
 }
 .blocker .muted {
   margin: 5px 0;
+}
+.blocker-heading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  text-align: left;
+  min-height: 32px;
+}
+.blocker-heading > strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+.blocker.failed::before {
+  background: var(--destructive);
+}
+.blocker.failed .course-code {
+  background: #fff0f0;
+  color: #a14040;
 }
 .estimate-note {
   font-size: 12px;
@@ -1104,6 +1182,106 @@ label > input,
 .profile-settings button {
   justify-self: start;
 }
+.development-settings {
+  max-width: 680px;
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-8);
+  margin-top: var(--space-2);
+}
+.destructive-outline {
+  color: #a14040;
+  border-color: #e5bfbf;
+}
+.destructive-outline:hover {
+  background: #fff0f0;
+}
+.onboarding-surface {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(240px, 0.8fr);
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-8);
+  background: linear-gradient(120deg, #eaf2ed, #f2f7f3);
+  border: 1px solid #d2e5d8;
+  border-radius: 16px;
+  box-shadow: 0 6px 24px #1e593a08;
+}
+.setup-intro {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-4);
+}
+.setup-intro h2 {
+  font-size: 28px;
+  letter-spacing: -0.025em;
+  color: var(--deep-green);
+}
+.setup-intro > p.muted {
+  font-size: 14px;
+  max-width: 440px;
+}
+.setup-journey {
+  display: grid;
+  gap: var(--space-6);
+}
+.setup-journey li {
+  display: flex;
+  align-items: center;
+  position: relative;
+  gap: var(--space-4);
+}
+.setup-journey li:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 40px;
+  bottom: -24px;
+  left: 19px;
+  width: 1px;
+  background: #bad0c1;
+}
+.setup-node {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border: 1px solid #bad0c1;
+  border-radius: 50%;
+  color: var(--primary);
+  background: #f5f8f5;
+}
+.setup-node svg {
+  width: 18px;
+  height: 18px;
+}
+.setup-journey li:last-child .setup-node {
+  color: var(--milestone-text);
+  border-color: #d8c99a;
+}
+.setup-journey strong,
+.setup-journey small {
+  display: block;
+}
+.setup-journey strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+.setup-journey small {
+  color: var(--muted-foreground);
+}
+[data-slot='alert-dialog-content'] {
+  width: min(420px, calc(100vw - 32px));
+  max-width: 420px;
+  padding: var(--space-6);
+}
+[data-slot='alert-dialog-overlay'],
+[data-slot='sheet-overlay'] {
+  backdrop-filter: none;
+  background: #123e2c33;
+}
 .map-toolbar {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) 180px minmax(200px, 1fr);
@@ -1203,8 +1381,20 @@ label > input,
     border-color 180ms ease,
     background 180ms ease;
 }
-.subject-card > .course-code {
+.subject-card .course-code {
   font-size: 12px;
+}
+.card-code-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+}
+.card-code-row > svg {
+  width: 16px;
+  height: 16px;
+  color: var(--primary);
+  flex-shrink: 0;
 }
 .subject-card.current .course-code {
   background: #faf0d1;
@@ -1259,6 +1449,10 @@ label > input,
   background: #e7ece8;
   color: #57675e;
 }
+.subject-card.trace-muted .pill {
+  background: transparent;
+  border-color: transparent;
+}
 .subject-card.related {
   outline: 2px solid #689b7b;
   outline-offset: 2px;
@@ -1312,9 +1506,43 @@ label > input,
 }
 .planning-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(280px, 1fr);
+  grid-template-columns: minmax(0, 1.4fr) minmax(300px, 1fr);
   gap: var(--space-6);
   align-items: start;
+}
+.planner-term-nav {
+  display: flex;
+  gap: var(--space-3);
+  overflow-x: auto;
+  min-width: 0;
+  padding: var(--space-1);
+  scroll-padding: var(--space-1);
+}
+.term-selector {
+  display: grid;
+  flex: 0 0 240px;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  background: transparent;
+  border-bottom: 2px solid var(--border);
+  text-align: left;
+  transition:
+    background 180ms ease,
+    border-color 180ms ease;
+}
+.term-selector strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.term-selector small {
+  color: var(--muted-foreground);
+}
+.term-selector[aria-pressed='true'] {
+  background: var(--soft-green);
+  border-color: var(--primary);
+}
+.term-selector:hover {
+  background: #edf4ef;
 }
 .planner-timeline {
   display: grid;
@@ -1507,6 +1735,9 @@ label > input,
   font-weight: 500;
   margin-left: var(--space-2);
   vertical-align: middle;
+}
+.comparison-stats:empty {
+  display: none;
 }
 .scenario-impact {
   border-top: 1px solid var(--border);
@@ -1716,6 +1947,9 @@ label > input,
   .planning-layout {
     grid-template-columns: minmax(0, 1fr);
   }
+  .onboarding-surface {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .candidate-panel {
     order: -1;
   }
@@ -1834,11 +2068,8 @@ label > input,
   .progress-metrics {
     gap: var(--space-4);
   }
-  .progress-summary strong {
-    font-size: 32px;
-  }
-  .progress-percentage {
-    font-size: 32px;
+  .journey-value .progress-percentage {
+    font-size: 40px;
   }
   .planned-subject {
     flex-wrap: wrap;
@@ -1863,7 +2094,21 @@ label > input,
     padding: var(--space-3) 0 0;
   }
   .hero-heading h2 {
-    font-size: 20px;
+    font-size: 11px;
+  }
+  .hero-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .onboarding-surface {
+    padding: var(--space-6);
+  }
+  .setup-intro h2 {
+    font-size: 24px;
+  }
+  .blocker-heading {
+    min-height: 44px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1885,6 +2130,7 @@ label > input,
   }
   .list-row:hover,
   .subject-card:hover,
+  .course-row:hover .course-row-end svg,
   [data-slot='button']:hover svg {
     transform: none;
   }

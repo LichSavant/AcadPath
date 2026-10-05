@@ -16,6 +16,8 @@ The dev/build commands prepare local PDF and OCR worker assets automatically. Op
 
 No new database migration is required for this update. Existing records remain compatible. `db:migrate` applies the existing schema to a fresh local database.
 
+For repeatable local upload testing, open **Settings → Development / Testing → Reset Academic Record**. Confirming removes only the signed-in account's saved curriculum, statuses, plan, profile, and settings, then returns to onboarding without a refresh. This control appears only in development. `DELETE /api/record` uses the existing authentication and rejects cross-origin deletion; it cannot target another account.
+
 ## Student flow
 
 1. A new account sees only the setup invitation.
@@ -54,7 +56,7 @@ npm.cmd run build
 npm.cmd run test:flow
 ```
 
-Unit tests cover academic rules, parsing, incomplete extraction, file limits, setup state, and simulation isolation. HTTP tests cover confirmation, status completion, persistence, revisions, planning, validation, and authentication. They restore an existing record; a fresh test database retains its test fixture.
+Unit tests cover academic rules, parsing, incomplete extraction, file limits, setup state, and simulation isolation. HTTP tests cover confirmation, status completion, persistence, revisions, planning, validation, authentication, unauthorized and cross-origin reset rejection, idempotent deletion, and two reset/import cycles. They restore an existing record and return a fresh test database to its no-record state.
 
 Use a separate local D1 store for verification to preserve your development record:
 

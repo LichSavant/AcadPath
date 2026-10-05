@@ -32,6 +32,30 @@ export async function GET() {
     );
   }
 }
+export async function DELETE(request: Request) {
+  const user = await getChatGPTUser();
+  if (!user)
+    return json({ error: 'Sign in to reset your academic record.' }, 401);
+  const origin = request.headers.get('origin');
+  if (
+    (origin && origin !== new URL(request.url).origin) ||
+    request.headers.get('sec-fetch-site') === 'cross-site'
+  )
+    return json({ error: 'Cross-origin writes are not allowed.' }, 403);
+  try {
+    await getBinding()
+      .prepare('DELETE FROM student_records WHERE user_id = ?')
+      .bind(user.userId)
+      .run();
+    return json({ success: true });
+  } catch (error) {
+    console.error('Record reset failed', error);
+    return json(
+      { error: 'Your record could not be reset. Please retry.' },
+      503,
+    );
+  }
+}
 export async function PUT(request: Request) {
   const user = await getChatGPTUser();
   if (!user)

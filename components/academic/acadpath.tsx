@@ -10,6 +10,8 @@ import {
   FlaskConical,
   LogOut,
   Settings,
+  FileText,
+  ArrowRight,
 } from 'lucide-react';
 import {
   SidebarProvider,
@@ -39,11 +41,17 @@ import {
   eligibility,
   completedCodes,
   summary,
+  descendants,
   isSetupComplete,
 } from '@/lib/academic';
 import type { ProspectusDraft } from '@/lib/prospectus';
 import { Dashboard, CurriculumMap } from './overview';
-import { UploadView, ReviewView, ProfileSettings } from './import-review';
+import {
+  UploadView,
+  ReviewView,
+  ProfileSettings,
+  DevelopmentSettings,
+} from './import-review';
 import { Planner, Simulator } from './planning';
 import {
   Pill,
@@ -63,6 +71,19 @@ const pages = [
   ['settings', 'Settings', Settings],
 ] as const;
 type Page = (typeof pages)[number][0] | 'upload';
+const setupSteps = [
+  {
+    icon: FileText,
+    title: 'Curriculum',
+    description: 'Start with your subjects',
+  },
+  { icon: CalendarDays, title: 'Plan', description: 'Choose your next steps' },
+  {
+    icon: GraduationCap,
+    title: 'Graduation',
+    description: 'See where your path leads',
+  },
+];
 export default function AcadPath(props: { name: string; local: boolean }) {
   return (
     <SidebarProvider
@@ -157,6 +178,35 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
       setBusy(false);
     }
   }
+  async function resetRecord() {
+    if (busy) return false;
+    setBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      const response = await fetch('/api/record', { method: 'DELETE' });
+      const result = (await response.json()) as {
+        success?: boolean;
+        error?: string;
+      };
+      if (!response.ok || !result.success)
+        throw new Error(result.error ?? 'Your record could not be reset.');
+      setData(null);
+      setRevision(0);
+      setPending(null);
+      setSelected(null);
+      navigate('dashboard');
+      setMessage('Academic record reset. You can upload a curriculum again.');
+      return true;
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : 'Your record could not be reset.',
+      );
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
   useEffect(() => {
     if (!message) return;
     const timer = window.setTimeout(() => setMessage(''), 4000);
@@ -182,6 +232,10 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
       (s) => selected && s.prerequisites.includes(selected.code),
     ) ?? [];
   const studentName = data?.profile?.name ?? name;
+  const downstreamCount =
+    selected && data
+      ? descendants(data.curriculum.subjects, selected.code).length
+      : 0;
   const pageLabel =
     page === 'upload'
       ? 'Upload Prospectus'
@@ -421,29 +475,67 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
               {ready && data && page === 'simulator' && (
                 <Simulator data={data} />
               )}
-              {data && page === 'settings' && (
-                <ProfileSettings
-                  key={revision}
-                  data={data}
-                  name={name}
-                  save={save}
-                  busy={busy}
-                />
+              {page === 'settings' && (
+                <div className="stack">
+                  {data && (
+                    <ProfileSettings
+                      key={revision}
+                      data={data}
+                      name={name}
+                      save={save}
+                      busy={busy}
+                    />
+                  )}
+                  {local && (
+                    <DevelopmentSettings
+                      reset={resetRecord}
+                      busy={busy || !data}
+                    />
+                  )}
+                </div>
               )}
               {!ready && !['upload', 'review', 'settings'].includes(page) && (
-                <section className="panel setup-card">
-                  <h2>
-                    {data ? 'Mark your subjects' : 'Set up your curriculum'}
-                  </h2>
-                  <p className="muted">
-                    {data
-                      ? 'Save your subject statuses to open your pathway.'
-                      : 'Upload your USC prospectus to get started.'}
-                  </p>
-                  <Button onClick={() => navigate(data ? 'review' : 'upload')}>
-                    {data ? 'Mark Subject Status' : 'Upload Prospectus'}
-                  </Button>
-                  {!data && <small className="muted">PDF or image</small>}
+                <section className="onboarding-surface">
+                  <div className="setup-intro">
+                    <p className="eyebrow">YOUR JOURNEY STARTS HERE</p>
+                    <h2>
+                      {data
+                        ? 'Find your current position'
+                        : 'Build your academic path'}
+                    </h2>
+                    <p className="muted">
+                      {data
+                        ? 'Save your subject statuses to open your pathway.'
+                        : 'Upload your curriculum to see what you can take, what blocks you, and when you can graduate.'}
+                    </p>
+                    <Button
+                      onClick={() => navigate(data ? 'review' : 'upload')}
+                    >
+                      {data ? 'Mark Subject Status' : 'Upload Curriculum'}
+                      <ArrowRight aria-hidden="true" />
+                    </Button>
+                    {!data && (
+                      <small className="muted">
+                        PDF or image · reviewed before saving
+                      </small>
+                    )}
+                  </div>
+                  <ol
+                    className="setup-journey"
+                    aria-label="Your academic journey"
+                  >
+                    {setupSteps.map(({ icon: Icon, title, description }) => (
+                      <li key={title}>
+                        <span className="setup-node">
+                          <Icon aria-hidden="true" />
+                        </span>
+                        <div>
+                          <strong>{title}</strong>
+                          <small>{description}</small>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
                 </section>
               )}
             </>
@@ -472,7 +564,14 @@ function AcademicWorkspace({ name, local }: { name: string; local: boolean }) {
                 </SheetDescription>
               </SheetHeader>
               <div className="sheet-body">
-                <Pill status={academicState(selected, data.statuses)} />
+                <div className="row drawer-status">
+                  <Pill status={academicState(selected, data.statuses)} />
+                  {downstreamCount > 0 && (
+                    <span className="muted">
+                      {downstreamCount} downstream subjects
+                    </span>
+                  )}
+                </div>
                 <h3>Can I take this?</h3>
                 <p>
                   {academicState(selected, data.statuses) === 'completed'

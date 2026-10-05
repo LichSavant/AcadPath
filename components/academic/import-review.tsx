@@ -712,3 +712,76 @@ export function ProfileSettings({
     </section>
   );
 }
+
+export function DevelopmentSettings({
+  reset,
+  busy,
+}: {
+  reset: () => Promise<boolean>;
+  busy: boolean;
+}) {
+  const [confirming, setConfirming] = useState(false),
+    [failed, setFailed] = useState(false);
+  return (
+    <section
+      className="development-settings"
+      aria-labelledby="development-heading"
+    >
+      <p className="eyebrow">LOCAL DEVELOPMENT</p>
+      <h2 id="development-heading">Development / Testing</h2>
+      <p className="muted">
+        Clears your saved curriculum and progress so you can test onboarding and
+        curriculum import again.
+      </p>
+      <Button
+        variant="outline"
+        className="destructive-outline"
+        disabled={busy}
+        onClick={() => {
+          setFailed(false);
+          setConfirming(true);
+        }}
+      >
+        <Trash2 aria-hidden="true" />
+        Reset Academic Record
+      </Button>
+      <AlertDialog
+        open={confirming}
+        onOpenChange={(open) => {
+          if (!busy) setConfirming(open);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset your academic record?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove your saved curriculum, subject statuses, planner
+              data, and settings for this account. Continue?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {failed && (
+            <Notice tone="warning">
+              Reset failed. Your record is still available. Close this dialog to
+              review the error and retry.
+            </Notice>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>
+              Keep my record
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={busy}
+              onClick={async () => {
+                if (await reset()) setConfirming(false);
+                else setFailed(true);
+              }}
+            >
+              {busy ? 'Resetting…' : 'Reset Academic Record'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </section>
+  );
+}

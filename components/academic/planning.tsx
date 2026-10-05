@@ -79,6 +79,7 @@ export function Planner({
     const suggested = forecast(draft);
     changePlan(suggested.plan);
     setTermCount(Math.max(2, suggested.plan.length));
+    setActiveTerm(0);
     setError('');
   }
   async function commit() {
@@ -220,131 +221,157 @@ export function Planner({
           </span>
         )}
       </Notice>
+      <nav className="planner-term-nav" aria-label="Planned semesters">
+        {Array.from({ length: termCount }, (_, term) => {
+          const termPlan = evaluation.terms.find((t) => t.term === term);
+          return (
+            <button
+              key={term}
+              className="term-selector"
+              aria-pressed={activeTerm === term}
+              onClick={() => setActiveTerm(term)}
+            >
+              <span className="eyebrow">TERM {term + 1}</span>
+              <strong>{termLabel(draft.settings, term)}</strong>
+              <small>
+                {termPlan?.units ?? 0} units · {termPlan?.entries.length ?? 0}{' '}
+                subjects
+              </small>
+            </button>
+          );
+        })}
+      </nav>
       <div className="planning-layout">
         <div className="planner-timeline">
-          <p className="eyebrow">PLANNED SEMESTERS</p>
-          {Array.from({ length: termCount }, (_, term) => {
-            const planned =
-              draft.plan.find((t) => t.term === term)?.codes ?? [];
-            const termEvaluation = evaluation.terms.find(
-              (t) => t.term === term,
-            );
-            const progress =
-              termEvaluation ??
-              evaluatePlan(draft, [
-                ...draft.plan.filter((t) => t.term < term),
-                { term, codes: [] },
-              ]).terms.at(-1)!;
-            return (
-              <section
-                className={
-                  'soft-panel planned-term' +
-                  (activeTerm === term ? ' active-term' : '')
-                }
-                key={term}
-              >
-                <header className="section-heading">
-                  <div>
-                    <p className="eyebrow">FUTURE TERM {term + 1}</p>
-                    <h2>{termLabel(draft.settings, term)}</h2>
-                  </div>
-                  <Button
-                    variant={activeTerm === term ? 'secondary' : 'outline'}
-                    onClick={() => setActiveTerm(term)}
-                    aria-pressed={activeTerm === term}
-                  >
-                    {activeTerm === term ? 'Adding Subjects' : 'Add Subject'}
-                  </Button>
-                </header>
-                {planned.length ? (
-                  <div className="stack">
-                    {planned.map((code) => {
-                      const s = draft.curriculum.subjects.find(
-                        (s) => s.code === code,
-                      )!;
-                      const entry = termEvaluation?.entries.find(
-                        (e) => e.code === code,
-                      );
-                      return (
-                        <div className="planned-subject" key={code}>
-                          <div className="planned-subject-info">
-                            <CourseCode code={s.code} />
-                            <p>{s.name}</p>
-                            <span className="muted">{s.units} units</span>{' '}
-                            <Pill
-                              status={entry?.eligible ? 'eligible' : 'blocked'}
-                            />
-                            {entry?.reasons.map((r) => (
-                              <p className="failed-text" key={r}>
-                                {r}
-                              </p>
-                            ))}
+          <p className="eyebrow">MY PLANNED SEMESTER</p>
+          {Array.from({ length: termCount }, (_, term) => term)
+            .filter((term) => term === activeTerm)
+            .map((term) => {
+              const planned =
+                draft.plan.find((t) => t.term === term)?.codes ?? [];
+              const termEvaluation = evaluation.terms.find(
+                (t) => t.term === term,
+              );
+              const progress =
+                termEvaluation ??
+                evaluatePlan(draft, [
+                  ...draft.plan.filter((t) => t.term < term),
+                  { term, codes: [] },
+                ]).terms.at(-1)!;
+              return (
+                <section
+                  className={
+                    'soft-panel planned-term' +
+                    (activeTerm === term ? ' active-term' : '')
+                  }
+                  key={term}
+                >
+                  <header className="section-heading">
+                    <div>
+                      <p className="eyebrow">FUTURE TERM {term + 1}</p>
+                      <h2>{termLabel(draft.settings, term)}</h2>
+                    </div>
+                    <Button
+                      variant={activeTerm === term ? 'secondary' : 'outline'}
+                      onClick={() => setActiveTerm(term)}
+                      aria-pressed={activeTerm === term}
+                    >
+                      {activeTerm === term ? 'Adding Subjects' : 'Add Subject'}
+                    </Button>
+                  </header>
+                  {planned.length ? (
+                    <div className="stack">
+                      {planned.map((code) => {
+                        const s = draft.curriculum.subjects.find(
+                          (s) => s.code === code,
+                        )!;
+                        const entry = termEvaluation?.entries.find(
+                          (e) => e.code === code,
+                        );
+                        return (
+                          <div className="planned-subject" key={code}>
+                            <div className="planned-subject-info">
+                              <CourseCode code={s.code} />
+                              <p>{s.name}</p>
+                              <span className="muted">
+                                {s.units} units
+                              </span>{' '}
+                              <Pill
+                                status={
+                                  entry?.eligible ? 'eligible' : 'blocked'
+                                }
+                              />
+                              {entry?.reasons.map((r) => (
+                                <p className="failed-text" key={r}>
+                                  {r}
+                                </p>
+                              ))}
+                            </div>
+                            <div className="subject-actions">
+                              <Choice
+                                label={'Move ' + code + ' to term'}
+                                value={String(term)}
+                                onChange={(v) =>
+                                  changePlan(
+                                    movePlannedSubject(
+                                      draft.plan,
+                                      code,
+                                      Number(v),
+                                    ),
+                                  )
+                                }
+                                options={Array.from(
+                                  { length: termCount },
+                                  (_, i) => ({
+                                    value: String(i),
+                                    label: 'Term ' + (i + 1),
+                                  }),
+                                )}
+                              />
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label={'Remove ' + code}
+                                onClick={() =>
+                                  changePlan(
+                                    movePlannedSubject(draft.plan, code, null),
+                                  )
+                                }
+                              >
+                                <Trash2 size={16} />
+                              </Button>
+                            </div>
                           </div>
-                          <div className="subject-actions">
-                            <Choice
-                              label={'Move ' + code + ' to term'}
-                              value={String(term)}
-                              onChange={(v) =>
-                                changePlan(
-                                  movePlannedSubject(
-                                    draft.plan,
-                                    code,
-                                    Number(v),
-                                  ),
-                                )
-                              }
-                              options={Array.from(
-                                { length: termCount },
-                                (_, i) => ({
-                                  value: String(i),
-                                  label: 'Term ' + (i + 1),
-                                }),
-                              )}
-                            />
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              aria-label={'Remove ' + code}
-                              onClick={() =>
-                                changePlan(
-                                  movePlannedSubject(draft.plan, code, null),
-                                )
-                              }
-                            >
-                              <Trash2 size={16} />
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <Blank title="Ready to build this semester">
-                    {activeTerm === term
-                      ? 'Add subjects from the available list.'
-                      : 'Select Add Subject to plan this semester.'}
-                  </Blank>
-                )}
-                <footer className="term-footer">
-                  <div className="row">
-                    <strong className="unit-total">
-                      {termEvaluation?.units ?? 0}{' '}
-                      <span>/ {draft.settings.maxUnits} units</span>
-                    </strong>
-                    <span>{progress.progress}% projected completion</span>
-                  </div>
-                  <Progress
-                    value={progress.progress}
-                    aria-label={'Projected progress after term ' + (term + 1)}
-                  />
-                  <small>
-                    {progress.completedUnits} completed units ·{' '}
-                    {progress.remainingUnits} remaining
-                  </small>
-                </footer>
-              </section>
-            );
-          })}
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <Blank title="Ready to build this semester">
+                      {activeTerm === term
+                        ? 'Add subjects from the available list.'
+                        : 'Select Add Subject to plan this semester.'}
+                    </Blank>
+                  )}
+                  <footer className="term-footer">
+                    <div className="row">
+                      <strong className="unit-total">
+                        {termEvaluation?.units ?? 0}{' '}
+                        <span>/ {draft.settings.maxUnits} units</span>
+                      </strong>
+                      <span>{progress.progress}% projected completion</span>
+                    </div>
+                    <Progress
+                      value={progress.progress}
+                      aria-label={'Projected progress after term ' + (term + 1)}
+                    />
+                    <small>
+                      {progress.completedUnits} completed units ·{' '}
+                      {progress.remainingUnits} remaining
+                    </small>
+                  </footer>
+                </section>
+              );
+            })}
           {termCount < 24 && (
             <Button
               variant="outline"
@@ -573,21 +600,30 @@ export function Simulator({ data }: { data: RecordData }) {
                   {graduationLabel(view.record, view.result.graduation)}
                 </h2>
                 <div className="comparison-stats">
-                  <ComparisonMetric
-                    value={view.stats.eligible.length}
-                    label="can take next"
-                    baseline={i ? baselineStats.eligible.length : undefined}
-                  />
-                  <ComparisonMetric
-                    value={view.stats.blocked.length}
-                    label="blocked now"
-                    baseline={i ? baselineStats.blocked.length : undefined}
-                  />
-                  <ComparisonMetric
-                    value={view.stats.remainingUnits}
-                    label="remaining units"
-                    baseline={i ? baselineStats.remainingUnits : undefined}
-                  />
+                  {scenario.summary.eligible.length !==
+                    baselineStats.eligible.length && (
+                    <ComparisonMetric
+                      value={view.stats.eligible.length}
+                      label="can take next"
+                      baseline={i ? baselineStats.eligible.length : undefined}
+                    />
+                  )}
+                  {scenario.summary.blocked.length !==
+                    baselineStats.blocked.length && (
+                    <ComparisonMetric
+                      value={view.stats.blocked.length}
+                      label="blocked now"
+                      baseline={i ? baselineStats.blocked.length : undefined}
+                    />
+                  )}
+                  {scenario.summary.remainingUnits !==
+                    baselineStats.remainingUnits && (
+                    <ComparisonMetric
+                      value={view.stats.remainingUnits}
+                      label="remaining units"
+                      baseline={i ? baselineStats.remainingUnits : undefined}
+                    />
+                  )}
                 </div>
                 {i === 1 && (
                   <p
@@ -660,32 +696,54 @@ export function Simulator({ data }: { data: RecordData }) {
               <h2>Simulated Plan</h2>
             </div>
             <div className="simulation-terms">
-              {scenario.forecast.plan.map((t) => {
-                const projected = evaluation?.terms.find(
-                  (e) => e.term === t.term,
-                );
-                return (
-                  <div className="simulation-term" key={t.term}>
-                    <p className="eyebrow">TERM {t.term + 1}</p>
-                    <strong>{termLabel(data.settings, t.term)}</strong>
-                    <p>
-                      {t.codes.join(', ') ||
-                        'No available subjects this semester'}
-                    </p>
-                    <div className="record-line">
-                      <span>{projected?.units ?? 0} units</span>
-                      <span>{projected?.remainingUnits ?? 0} remaining</span>
+              {scenario.forecast.plan
+                .filter((t) => {
+                  const previous = baseline.plan.find((b) => b.term === t.term);
+                  return (
+                    !previous ||
+                    t.codes.length !== previous.codes.length ||
+                    t.codes.some((c) => !previous.codes.includes(c))
+                  );
+                })
+                .map((t) => {
+                  const projected = evaluation?.terms.find(
+                    (e) => e.term === t.term,
+                  );
+                  return (
+                    <div className="simulation-term" key={t.term}>
+                      <p className="eyebrow">TERM {t.term + 1}</p>
+                      <strong>{termLabel(data.settings, t.term)}</strong>
+                      <p>
+                        {t.codes.join(', ') ||
+                          'No available subjects this semester'}
+                      </p>
+                      <div className="record-line">
+                        <span>{projected?.units ?? 0} units</span>
+                        <span>{projected?.remainingUnits ?? 0} remaining</span>
+                      </div>
+                      <Progress
+                        value={projected?.progress ?? 0}
+                        aria-label={
+                          'Simulated completion after term ' + (t.term + 1)
+                        }
+                      />
                     </div>
-                    <Progress
-                      value={projected?.progress ?? 0}
-                      aria-label={
-                        'Simulated completion after term ' + (t.term + 1)
-                      }
-                    />
-                  </div>
-                );
-              })}
+                  );
+                })}
             </div>
+            {scenario.forecast.plan.length > 0 &&
+              scenario.forecast.plan.every((t) => {
+                const previous = baseline.plan.find((b) => b.term === t.term);
+                return (
+                  previous &&
+                  t.codes.length === previous.codes.length &&
+                  t.codes.every((c) => previous.codes.includes(c))
+                );
+              }) && (
+                <p className="muted">
+                  Your semester subjects stay on the same path.
+                </p>
+              )}
             {!scenario.forecast.plan.length && (
               <Blank
                 title={

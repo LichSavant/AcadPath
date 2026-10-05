@@ -13,6 +13,10 @@ const base = process.env.ACADPATH_TEST_URL ?? 'http://localhost:3000';
 void test('HTTP flow: auth → import → mark → save → reload → plan → isolated simulation', async () => {
   const unauthorized = await fetch(base + '/api/record');
   assert.equal(unauthorized.status, 401);
+  const unauthorizedReset = await fetch(base + '/api/record', {
+    method: 'DELETE',
+  });
+  assert.equal(unauthorizedReset.status, 401);
   const login = await fetch(
     base + '/signin-with-chatgpt?return_to=/workspace',
     { redirect: 'manual' },
@@ -37,6 +41,7 @@ void test('HTTP flow: auth → import → mark → save → reload → plan → 
         data: RecordData | null;
         revision: number;
         error?: string;
+        success?: boolean;
       },
     };
   };
@@ -138,6 +143,41 @@ void test('HTTP flow: auth → import → mark → save → reload → plan → 
       body: JSON.stringify({ data, revision }),
     });
     assert.equal(crossOrigin.status, 403);
+    const resetHeaders: Record<string, string>[] = [
+      { Origin: 'https://untrusted.example' },
+      { 'Sec-Fetch-Site': 'cross-site' },
+    ];
+    for (const extraHeaders of resetHeaders) {
+      const forbiddenReset = await fetch(base + '/api/record', {
+        method: 'DELETE',
+        headers: { ...headers, ...extraHeaders },
+      });
+      assert.equal(forbiddenReset.status, 403);
+      assert.deepEqual((await request('GET')).value.data, data);
+    }
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const reset = await request('DELETE');
+      assert.equal(reset.res.status, 200);
+      assert.deepEqual(reset.value, { success: true });
+      const clean = await request('GET');
+      assert.deepEqual(clean.value, { data: null, revision: 0 });
+      revision = 0;
+      // DELETE is idempotent and does not need a JSON payload.
+      assert.equal((await request('DELETE')).res.status, 200);
+      const staleAfterReset = await request('PUT', { data, revision: 1 });
+      assert.equal(staleAfterReset.res.status, 409);
+      const imported = await request('PUT', {
+        data: { ...data, plan: [], statuses: {}, setupComplete: false },
+        revision,
+      });
+      assert.equal(imported.res.status, 200);
+      revision = imported.value.revision;
+      assert.equal(imported.value.data?.setupComplete, false);
+      const readyAgain = await request('PUT', { data, revision });
+      assert.equal(readyAgain.res.status, 200);
+      revision = readyAgain.value.revision;
+      assert.deepEqual((await request('GET')).value.data, data);
+    }
     const workspace = await fetch(base + '/workspace', {
       headers: { Cookie: cookie },
     });
@@ -148,11 +188,14 @@ void test('HTTP flow: auth → import → mark → save → reload → plan → 
     assert.ok(!html.includes('Internal Server Error'));
   } finally {
     if (original.value.data) {
+      revision = (await request('GET')).value.revision;
       const restored = await request('PUT', {
         data: original.value.data,
         revision,
       });
       assert.equal(restored.res.status, 200);
+    } else {
+      assert.equal((await request('DELETE')).res.status, 200);
     }
   }
 });
