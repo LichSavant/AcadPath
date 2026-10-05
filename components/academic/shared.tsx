@@ -91,6 +91,9 @@ export function Blank({
     </Empty>
   );
 }
+export function CourseCode({ code }: { code: string }) {
+  return <strong className="course-code">{code}</strong>;
+}
 export function SubjectCard({
   subject,
   data,
@@ -108,7 +111,7 @@ export function SubjectCard({
       className={'subject-card ' + state + (highlight ? ' related' : '')}
       onClick={() => onSelect(subject)}
     >
-      <strong>{subject.code}</strong>
+      <CourseCode code={subject.code} />
       <p>{subject.name}</p>
       <span className="muted">{subject.units} units</span>
       <div className="row">

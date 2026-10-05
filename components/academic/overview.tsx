@@ -1,6 +1,12 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { ArrowUpRight } from 'lucide-react';
+import {
+  ArrowUpRight,
+  ArrowRight,
+  Route,
+  BookOpen,
+  GraduationCap,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
@@ -26,6 +32,7 @@ import {
 } from '@/lib/academic';
 import {
   SubjectCard,
+  CourseCode,
   Pill,
   Blank,
   Choice,
@@ -61,10 +68,16 @@ export function Dashboard({
   return (
     <div className="stack">
       <section
-        className="panel academic-progress"
+        className="accent-panel academic-progress"
         aria-labelledby="progress-heading"
       >
-        <h2 id="progress-heading">Academic Progress</h2>
+        <div className="hero-heading">
+          <div>
+            <p className="eyebrow">YOUR PATH</p>
+            <h2 id="progress-heading">Academic Progress</h2>
+          </div>
+          <Route className="path-icon" aria-hidden="true" />
+        </div>
         <div className="progress-summary">
           <div className="row">
             <strong>
@@ -76,19 +89,31 @@ export function Dashboard({
         </div>
         <dl className="progress-metrics">
           <div>
-            <dt>Can Take Next</dt>
+            <dt>
+              <ArrowUpRight aria-hidden="true" />
+              Can Take Next
+            </dt>
             <dd>
-              {stats.eligible.length} <span>subjects</span>
+              {stats.eligible.length}{' '}
+              <span>
+                {stats.eligible.length === 1 ? 'subject' : 'subjects'}
+              </span>
             </dd>
           </div>
           <div>
-            <dt>Remaining</dt>
+            <dt>
+              <BookOpen aria-hidden="true" />
+              Remaining
+            </dt>
             <dd>
               {stats.remainingUnits} <span>units</span>
             </dd>
           </div>
           <div>
-            <dt>Est. Graduation</dt>
+            <dt>
+              <GraduationCap aria-hidden="true" />
+              Est. Graduation
+            </dt>
             <dd>{graduationLabel(data, path.graduation)}</dd>
           </div>
         </dl>
@@ -102,9 +127,12 @@ export function Dashboard({
         </Notice>
       )}
       <div className="dashboard-grid">
-        <section className="panel next-subjects">
+        <section className="soft-panel next-subjects">
           <div className="section-heading">
-            <h2>Can Take Next</h2>
+            <div>
+              <p className="eyebrow">NEXT ACTIONS</p>
+              <h2>Can Take Next</h2>
+            </div>
             <Button variant="ghost" onClick={() => navigate('planner')}>
               Plan <ArrowUpRight />
             </Button>
@@ -118,7 +146,7 @@ export function Dashboard({
                   onClick={() => select(s)}
                 >
                   <div>
-                    <strong>{s.code}</strong>
+                    <CourseCode code={s.code} />
                     <p>{s.name}</p>
                   </div>
                   <span>{s.units} units</span>
@@ -139,9 +167,12 @@ export function Dashboard({
           )}
         </section>
         {blockers.length > 0 && (
-          <section className="section-block">
+          <section className="soft-panel blockers-surface">
             <div className="section-heading">
-              <h2>Blockers</h2>
+              <div>
+                <p className="eyebrow">PATH CHECKPOINTS</p>
+                <h2>Blockers</h2>
+              </div>
               <Button variant="ghost" onClick={() => navigate('map')}>
                 Course Map
               </Button>
@@ -170,7 +201,7 @@ export function Dashboard({
                         statusOf(data.statuses, target.code) !== 'completed',
                     )
                     .map((target) => (
-                      <li key={target.code}>&rarr; {target.name}</li>
+                      <li key={target.code}>{target.name}</li>
                     ))}
                 </ul>
               </article>
@@ -178,90 +209,106 @@ export function Dashboard({
           </section>
         )}
       </div>
-      <div className="two-columns">
-        <section className="section-block">
-          <div className="section-heading">
-            <h2>Current Semester</h2>
-            <Button variant="ghost" onClick={() => navigate('review')}>
-              Update Statuses
-            </Button>
-          </div>
-          {stats.current.length ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Subject</TableHead>
-                  <TableHead>Units</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {stats.current.map((s) => (
-                  <TableRow key={s.code}>
-                    <TableCell>
+      <div className="semester-timeline">
+        <p className="eyebrow">YOUR TIMELINE</p>
+        <div className="two-columns semester-grid">
+          <section className="timeline-stop">
+            <div className="timeline-marker">
+              <span aria-hidden="true" />
+              NOW
+            </div>
+            <div className="section-surface">
+              <div className="section-heading">
+                <h2>Current Semester</h2>
+                <Button variant="ghost" onClick={() => navigate('review')}>
+                  Update Statuses
+                </Button>
+              </div>
+              {stats.current.length ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Subject</TableHead>
+                      <TableHead>Units</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {stats.current.map((s) => (
+                      <TableRow key={s.code}>
+                        <TableCell>
+                          <button
+                            className="subject-link"
+                            onClick={() => select(s)}
+                          >
+                            <strong>{s.code}</strong>
+                            <span>{s.name}</span>
+                          </button>
+                        </TableCell>
+                        <TableCell>{s.units}</TableCell>
+                        <TableCell>
+                          <Pill status="current" />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <p className="section-empty">No current subjects marked.</p>
+              )}
+            </div>
+          </section>
+          <section className="timeline-stop">
+            <div className="timeline-marker next-marker">
+              <span aria-hidden="true" />
+              NEXT
+              <ArrowRight size={14} aria-hidden="true" />
+            </div>
+            <div className="section-surface">
+              <div className="section-heading">
+                <h2>Next Semester</h2>
+                <Button variant="ghost" onClick={() => navigate('planner')}>
+                  {next ? 'Edit Plan' : 'Add Subjects'}
+                </Button>
+              </div>
+              {next ? (
+                <>
+                  <h3>{termLabel(data.settings, next.term)}</h3>
+                  {next.codes.map((code) => {
+                    const s = data.curriculum.subjects.find(
+                      (s) => s.code === code,
+                    )!;
+                    return (
                       <button
-                        className="subject-link"
+                        className="list-row"
+                        key={code}
                         onClick={() => select(s)}
                       >
-                        <strong>{s.code}</strong>
-                        <span>{s.name}</span>
+                        <div>
+                          <CourseCode code={s.code} />
+                          <p>{s.name}</p>
+                        </div>
+                        <span>{s.units} units</span>
                       </button>
-                    </TableCell>
-                    <TableCell>{s.units}</TableCell>
-                    <TableCell>
-                      <Pill status="current" />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <p className="section-empty">No current subjects marked.</p>
-          )}
-        </section>
-        <section className="section-block">
-          <div className="section-heading">
-            <h2>Next Semester</h2>
-            <Button variant="ghost" onClick={() => navigate('planner')}>
-              {next ? 'Edit Plan' : 'Add Subjects'}
-            </Button>
-          </div>
-          {next ? (
-            <>
-              <h3>{termLabel(data.settings, next.term)}</h3>
-              {next.codes.map((code) => {
-                const s = data.curriculum.subjects.find(
-                  (s) => s.code === code,
-                )!;
-                return (
-                  <button
-                    className="list-row"
-                    key={code}
-                    onClick={() => select(s)}
-                  >
-                    <div>
-                      <strong>{s.code}</strong>
-                      <p>{s.name}</p>
-                    </div>
-                    <span>{s.units} units</span>
-                  </button>
-                );
-              })}
-              <p className="term-total">
-                {next.codes.reduce(
-                  (n, code) =>
-                    n +
-                    (data.curriculum.subjects.find((s) => s.code === code)
-                      ?.units ?? 0),
-                  0,
-                )}{' '}
-                units total
-              </p>
-            </>
-          ) : (
-            <p className="section-empty">No semester planned yet.</p>
-          )}
-        </section>
+                    );
+                  })}
+                  <p className="term-total">
+                    {next.codes.reduce(
+                      (n, code) =>
+                        n +
+                        (data.curriculum.subjects.find((s) => s.code === code)
+                          ?.units ?? 0),
+                      0,
+                    )}{' '}
+                    units total
+                  </p>
+                </>
+              ) : (
+                <p className="section-empty">No semester planned yet.</p>
+              )}
+            </div>
+          </section>
+        </div>
       </div>
       <p className="muted estimate-note">
         Estimates assume future passes and your planner settings.
@@ -351,7 +398,12 @@ export function CurriculumMap({
             return (
               <section className="year-group" key={year}>
                 <header className="year-heading">
-                  <h2>Year {year}</h2>
+                  <h2>
+                    <span className="year-number" aria-hidden="true">
+                      {String(year).padStart(2, '0')}
+                    </span>
+                    Year {year}
+                  </h2>
                   <span>
                     {inYear.length} subjects ·{' '}
                     {inYear.reduce((n, s) => n + s.units, 0)} units shown
