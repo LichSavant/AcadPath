@@ -84,12 +84,142 @@ const ordinal: Record<string, string> = {
   '8th': '8',
 };
 const valueOf = (s: string) => ordinal[s.toLowerCase()] ?? s;
-const emptyRequirement = (s: string) =>
-  /^(?:none|n\/?a|nil|[-\u2013\u2014]+)$/i.test(s.trim())
-    ? ''
-    : s.trim().replace(/\s*(?:,|\+|&|\band\b)\s*/gi, ';');
+// Requisite cells mix labels, codes, and non-course rules such as
+// "2ND YEAR STANDING". Keep real course codes only and route labeled
+// corequisites to their own field.
+function splitRequirements(
+  value: string,
+  fallback: 'prerequisites' | 'corequisites',
+) {
+  const result: { prerequisites: string[]; corequisites: string[] } = {
+    prerequisites: [],
+    corequisites: [],
+  };
+  for (const raw of value.split(/;|,|\+|&|\band\b/i)) {
+    const segment = raw
+      .replace(/\b(?:pre|co)?-?req(?:uisite)?s?\b[:\-]?\s*/gi, '')
+      .replace(
+        /\b(?:[1-8](?:st|nd|rd|th)?|first|second|third|fourth|fifth)\s+year\s+standing\b/gi,
+        '',
+      )
+      .replace(/\b(?:senior|junior|sophomore|freshman)\s+standing\b/gi, '')
+      .trim();
+    if (
+      !segment ||
+      /^(?:none|n\/?a|nil|[-\u2013\u2014]+)$/i.test(segment) ||
+      !isCodeCell(segment) ||
+      /\bor\b/i.test(segment)
+    )
+      continue;
+    const type = /co.?req|corequisite/i.test(raw)
+      ? 'corequisites'
+      : fallback;
+    result[type].push(segment.toUpperCase().replace(/\s+/g, ' '));
+  }
+  return result;
+}
 const courseCode =
   /^([A-Z]{2,12}(?:\s*[.-]?\s*\d{1,4}[A-Z]*)(?:\s+[A-Z])?)\s+(.+)$/i;
+const hyphenCourseCode = /^([A-Z]{2,12}(?:-[A-Z0-9]{1,16})+)\s+(.+)$/i;
+const notCode =
+  /^(?:total|subtotal|page|course|description|subject|title|units?|requisite|semester|year|summer|academic|bachelor|master|doctor|elective|references?)\b/i;
+// Codes may be alphanumeric (CIS 1101), hyphenated (GE-MMW), or word-based
+// (CS ELEC). Reject prose so headings and footers never become subjects.
+function isCodeCell(value: string) {
+  const s = value.trim();
+  const words = s.split(/\s+/);
+  // A bare word is a wrapped title, not a code. Word codes look like
+  // "CS ELEC"; everything else needs a digit or a hyphen.
+  const wordCode =
+    words.length > 1 &&
+    words.length <= 3 &&
+    /^[A-Z]{2,4}$/i.test(words[0]) &&
+    words.slice(1).every((w) => /^[A-Z]{2,6}$/i.test(w));
+  return (
+    /^[A-Z0-9][A-Z0-9 .&_/-]{1,29}$/i.test(s) &&
+    (/\d/.test(s) || s.includes('-') || wordCode) &&
+    !notCode.test(s) &&
+    !/\b(?:and|of|the|in|for|with|to)\b/i.test(s)
+  );
+}
+function splitCells(line: string) {
+  const cells = (
+    line.includes('\t') ? line.split(/\t+/) : line.split(/\s*\|\s*| {2,}/)
+  ).map((c) => c.trim());
+  while (cells.length && !cells.at(-1)) cells.pop();
+  return cells;
+}
+function headerKey(c: string) {
+  return /description|subject|title/i.test(c)
+    ? 'name'
+    : /co.?req/i.test(c)
+      ? 'corequisites'
+      : /pre.?req|requisite/i.test(c)
+        ? 'prerequisites'
+        : /units?/i.test(c)
+          ? 'units'
+          : /semester|^sem$/i.test(c)
+            ? 'semester'
+            : /year/i.test(c)
+              ? 'year'
+              : /code|course/i.test(c)
+                ? 'code'
+                : '';
+}
+// Without column headers, split a single description cell. A requirement
+// starts at an explicit label, "None", or a course code after the units.
+function parseRest(text: string) {
+  const tokens = text.split(/\s+/).filter(Boolean);
+  let requirement = tokens.length;
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (
+      /^(?:none|n\/?a|nil|[-\u2013\u2014])$/i.test(token) ||
+      /^(?:pre|co)?-?req(?:uisite)?s?$/i.test(token)
+    ) {
+      requirement = i;
+      break;
+    }
+    if (
+      /^[A-Z]{2,6}$/i.test(token) &&
+      /^\d{1,4}[A-Z]?$/i.test(tokens[i + 1] ?? '') &&
+      (i === 0 ||
+        /^\d+(?:\.\d+)?$/.test(tokens[i - 1]) ||
+        tokens[i - 1] === ';')
+    ) {
+      requirement = i;
+      break;
+    }
+  }
+  const head = tokens.slice(0, requirement);
+  const numbers = head.flatMap((t, i) =>
+    /^\d+(?:\.\d+)?$/.test(t) ? [i] : [],
+  );
+  // Multiple numeric columns (lecture/lab/total) are ambiguous without a header.
+  return numbers.length === 1
+    ? {
+        name: head.filter((_, i) => i !== numbers[0]).join(' '),
+        units: head[numbers[0]],
+        prerequisites: tokens.slice(requirement).join(' '),
+      }
+    : {
+        name: head.join(' '),
+        units: '',
+        prerequisites: tokens.slice(requirement).join(' '),
+      };
+}
+function parseCells(parts: string[]) {
+  const numbers = parts.flatMap((c, i) =>
+    /^\d+(?:\.\d+)?$/.test(c) ? [i] : [],
+  );
+  return numbers.length === 1
+    ? {
+        name: parts.slice(0, numbers[0]).join(' ').trim(),
+        units: parts[numbers[0]],
+        prerequisites: parts.slice(numbers[0] + 1).join(' ').trim(),
+      }
+    : { name: parts.join(' ').trim(), units: '', prerequisites: '' };
+}
 export function parseProspectusText(
   text: string,
   filename: string,
@@ -102,92 +232,128 @@ export function parseProspectusText(
   for (const original of text.split(/\r?\n/)) {
     const line = original.trim();
     if (!line) continue;
-    const yearMatch = line.match(
-      /\b(first|second|third|fourth|fifth|sixth|seventh|eighth|[1-8](?:st|nd|rd|th)?)\s+year\b|\byear\s+([1-8])\b/i,
-    );
+    if (
+      /^elective equivalents\b/i.test(line) ||
+      /^references\b/i.test(line) ||
+      /^\[E\d\]/i.test(line)
+    )
+      break;
+    const cells = splitCells(line);
+    const dataLine =
+      (cells.length > 1 && isCodeCell(cells[0])) ||
+      courseCode.test(line) ||
+      hyphenCourseCode.test(line);
+    const yearMatch =
+      line.match(
+        /\b(first|second|third|fourth|fifth|sixth|seventh|eighth|[1-8](?:st|nd|rd|th)?)\s+year\b/i,
+      ) ?? line.match(/\byear\s*(?:level)?\s*[:\-]?\s*([1-8])\b/i);
     const semMatch = line.match(
       /\b(first|second|1st|2nd|[12])\s+sem(?:ester)?\b|\bsem(?:ester)?\s+([12])\b/i,
     );
-    if (yearMatch && !courseCode.test(line)) {
+    if (yearMatch && !dataLine) {
       year = valueOf(yearMatch[1] ?? yearMatch[2]);
       semester = '';
     }
-    if (semMatch && !courseCode.test(line))
-      semester = valueOf(semMatch[1] ?? semMatch[2]);
-    if ((yearMatch || semMatch) && !courseCode.test(line)) continue;
-    const cells = line.split(/\t+|\s*\|\s*| {2,}/).map((c) => c.trim());
+    if (semMatch && !dataLine) semester = valueOf(semMatch[1] ?? semMatch[2]);
+    if ((yearMatch || semMatch) && !dataLine) continue;
     if (
-      /\b(code|course no\.?|subject no\.?)\b/i.test(line) &&
-      /\b(subject|description|title)\b/i.test(line) &&
-      /units?/i.test(line)
+      /^(?:total|subtotal|page|academic year)\b/i.test(line) ||
+      /^(?:bachelor|master|doctor)\b/i.test(line) ||
+      /^in\s+[A-Z]/i.test(line) ||
+      /^bs computer science\b/i.test(line) ||
+      /^summer\b/i.test(line) ||
+      /^\d{1,2}$/.test(line)
+    )
+      continue;
+    if (
+      /\bunits?\b/i.test(line) &&
+      /\b(?:description|subject|title)\b/i.test(line) &&
+      /\b(?:course|code)\b/i.test(line)
     ) {
-      headers = cells.map((c) =>
-        /pre.?req/i.test(c)
-          ? 'prerequisites'
-          : /co.?req/i.test(c)
-            ? 'corequisites'
-            : /code|course no|subject no/i.test(c)
-              ? 'code'
-              : /units?/i.test(c)
-                ? 'units'
-                : /semester|^sem$/i.test(c)
-                  ? 'semester'
-                  : /year/i.test(c)
-                    ? 'year'
-                    : /subject|description|title/i.test(c)
-                      ? 'name'
-                      : '',
-      );
+      headers = cells.map(headerKey);
       continue;
     }
-    if (/^(?:total|subtotal|page|academic year)\b/i.test(line)) continue;
-    const match = line.match(courseCode);
-    if (!match) continue;
-    let row: DraftRow = {
+    const fromCells = cells.length > 1 && isCodeCell(cells[0]);
+    let code = '';
+    let name = '',
+      units = '',
+      prerequisites = '',
+      corequisites = '';
+    if (fromCells) {
+      code = cells[0];
+      if (headers.includes('name') && cells.length <= headers.length) {
+        const unitsIndex = headers.indexOf('units');
+        const unitsPresent = unitsIndex >= 0 && unitsIndex < cells.length;
+        for (let i = 0; i < cells.length; i++) {
+          const key = headers[i],
+            value = cells[i];
+          if (!key || !value) continue;
+          if (key === 'name') {
+            // A description and its units sometimes share one wide cell.
+            const trailing = unitsPresent
+              ? null
+              : value.match(/^(.*?)\s+(\d+(?:\.\d+)?)\s*(?:units?)?$/i);
+            if (trailing) {
+              name = trailing[1].trim();
+              units = trailing[2];
+            } else name = value;
+          } else if (key === 'units') units = value;
+          else if (key === 'prerequisites') prerequisites = value;
+          else if (key === 'corequisites') corequisites = value;
+          else if (key === 'year') year = value;
+          else if (key === 'semester') semester = value;
+        }
+      } else ({ name, units, prerequisites } = parseCells(cells.slice(1)));
+    } else {
+      const match = line.match(courseCode) ?? line.match(hyphenCourseCode);
+      if (!match) {
+        // A wrapped cell belongs to the previous subject: code fragments go
+        // to the requisite column, words continue the description.
+        const previous = rows.at(-1);
+        if (!previous) continue;
+        for (const part of cells.length > 1 ? cells : [line]) {
+          if (
+            /^(?:pre|co)?-?req(?:uisite)?s?\b/i.test(part) ||
+            /^\d{1,4}[A-Z]?(?:\s*;|$)/i.test(part)
+          )
+            previous.prerequisites =
+              `${previous.prerequisites} ${part}`.trim();
+          else previous.name = `${previous.name} ${part}`.trim();
+        }
+        previous.evidence = `${previous.evidence} ${line}`.trim();
+        continue;
+      }
+      code = match[1];
+      ({ name, units, prerequisites } = parseRest(match[2]));
+    }
+    const row: DraftRow = {
       id: String(rows.length + 1),
-      code: match[1].toUpperCase().replace(/\s+/g, ' '),
-      name: '',
-      units: '',
-      prerequisites: '',
-      corequisites: '',
+      code: code.toUpperCase().replace(/\s+/g, ' '),
+      name,
+      units,
+      prerequisites,
+      corequisites,
       year,
       semester,
       evidence: line,
-    };
-    if (
-      headers.includes('name') &&
-      headers.length === cells.length &&
-      cells.length > 2
-    ) {
-      for (let i = 0; i < headers.length; i++) {
-        const key = headers[i] as keyof Omit<DraftRow, 'id' | 'evidence'>;
-        if (key) row[key] = cells[i];
-      }
-    } else {
-      const rest = match[2];
-      const unit = rest.match(
-        /^(.*?)\s+(\d+(?:\.\d+)?)\s*(?:units?|u\.)?(?:\s+(.*))?$/i,
-      );
-      if (unit) {
-        row.name = unit[1].trim();
-        // Multiple numeric columns (lecture/lab/total) are ambiguous without a header.
-        if (!/^\d+(?:\.\d+)?(?:\s|$)/.test(unit[3] ?? '')) {
-          row.units = unit[2];
-          row.prerequisites = unit[3] ?? '';
-        }
-      } else row.name = rest.trim();
-    }
-    row = {
-      ...row,
-      code: row.code.toUpperCase(),
-      prerequisites: emptyRequirement(row.prerequisites),
-      corequisites: emptyRequirement(row.corequisites),
     };
     rows.push(row);
     if (rows.length > 300)
       throw new Error(
         'This prospectus exceeds 300 subjects. Split it into one curriculum.',
       );
+  }
+  for (const row of rows) {
+    const required = splitRequirements(row.prerequisites, 'prerequisites');
+    const concurrent = splitRequirements(row.corequisites, 'corequisites');
+    row.prerequisites = [
+      ...required.prerequisites,
+      ...concurrent.prerequisites,
+    ].join(';');
+    row.corequisites = [
+      ...required.corequisites,
+      ...concurrent.corequisites,
+    ].join(';');
   }
   return {
     name: filename.replace(/\.[^.]+$/, ''),
