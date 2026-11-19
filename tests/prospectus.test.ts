@@ -68,6 +68,58 @@ void test('rejects duplicate rows, absent prerequisite references and cycles at 
   cycle.rows[0].prerequisites = 'TEST 201';
   assert.throws(() => confirmProspectus(cycle), /cycle/i);
 });
+void test('recognizes Year Level headings, hyphenated/word codes, and numeric titles', () => {
+  const d = parseProspectusText(
+    [
+      'BACHELOR OF SCIENCE',
+      'IN COMPUTER SCIENCE',
+      'Effective Year: 2023 | Year Level 2',
+      '1ST Semester',
+      'Course\tCourse Description\tUnits\tRequisite',
+      'GE-MMW\tMATHEMATICS IN THE MODERN WORLD\t3.0',
+      'CS ELEC\tCS ELECTIVE [E4]\t3.0',
+      'NSTP 1\tNATIONAL SERVICE TRAINING PROGRAM 1\t3.0',
+      'TPE 1101\tPATH-FIT 1 - MOVEMENT ENHANCEMENT\t2.0',
+      'CS 3201N\tCS THESIS 1\t3.0\tPREREQUISITE CIS 1101',
+    ].join('\n'),
+    'BSCS 2023.pdf',
+    'pdf-text',
+  );
+  assert.deepEqual(
+    d.rows.map((r) => [r.code, r.year, r.semester, r.units, r.name]),
+    [
+      ['GE-MMW', '2', '1', '3.0', 'MATHEMATICS IN THE MODERN WORLD'],
+      ['CS ELEC', '2', '1', '3.0', 'CS ELECTIVE [E4]'],
+      ['NSTP 1', '2', '1', '3.0', 'NATIONAL SERVICE TRAINING PROGRAM 1'],
+      ['TPE 1101', '2', '1', '2.0', 'PATH-FIT 1 - MOVEMENT ENHANCEMENT'],
+      ['CS 3201N', '2', '1', '3.0', 'CS THESIS 1'],
+    ],
+  );
+  assert.equal(d.rows.at(-1)!.prerequisites, 'CIS 1101');
+});
+void test('merges wrapped description/requisite lines and drops standing rules', () => {
+  const d = parseProspectusText(
+    [
+      'Year Level 1',
+      '1ST Semester',
+      'Course\tCourse Description\tUnits\tRequisite',
+      'CIS 2202\tDIGITAL LOGIC DESIGN AND DIGITAL COMPUTER\t3.0\tPREREQUISITE CIS 1102N',
+      'CIRCUITS',
+      'CIS 2203N\tMOBILE DEVELOPMENT\t3.0\tPREREQUISITE CIS 1201; PREREQUISITE CIS',
+      '1202',
+      'CIS 2205\tDESIGN PROJECT\t3.0\t2ND YEAR STANDING',
+    ].join('\n'),
+    'BSCS 2023.pdf',
+    'pdf-text',
+  );
+  assert.equal(d.rows.length, 3);
+  assert.equal(
+    d.rows[0].name,
+    'DIGITAL LOGIC DESIGN AND DIGITAL COMPUTER CIRCUITS',
+  );
+  assert.equal(d.rows[1].prerequisites, 'CIS 1201;CIS 1202');
+  assert.equal(d.rows[2].prerequisites, '');
+});
 void test('file constraints accept PDF PNG JPG JPEG and reject misleading files', () => {
   for (const [name, type] of [
     ['a.PDF', 'application/pdf'],
